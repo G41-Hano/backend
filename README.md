@@ -1,6 +1,8 @@
 # Hano
 An Interactive Vocabulary Learning Platform for Hearing-Impaired Grade 3 Students.
 
+<br>
+
 ## Backend for Hano
 Uses the Django REST Framework to create the API endpoints used in the app.
 
