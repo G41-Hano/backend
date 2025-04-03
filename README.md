@@ -49,3 +49,11 @@ cd backend
 py manage.py runserver
 ```
 
+#### If you encounter "missing imports" problem, change the Python Interpreter to your <strong>virtual environment</strong>.
+1. In VS Code, press ```F1``` and type:
+```
+Python: Select Interpreter
+```
+2. Click ```Enter interpreter path...```
+3. Click ```Find...```
+4. Navigate to ```Hano/env/Scripts``` then select ```python.exe```
