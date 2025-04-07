@@ -1,8 +1,23 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 from .models import Role
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 # Serializers that convert the Django Object to JSON, and vice versa
+
+class CustomTokenSerializer(TokenObtainPairSerializer):
+  @classmethod
+  def get_token(cls, user):
+    token = super().get_token(user)
+
+    # Add custom claims
+    token['first_name'] = user.first_name
+    token['last_name'] = user.last_name
+    token['role'] = user.role.name
+    # ...
+
+    return token
+
 
 class UserSerializer(serializers.ModelSerializer):
   role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
