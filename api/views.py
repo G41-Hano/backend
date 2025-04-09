@@ -22,6 +22,20 @@ class UserListView(generics.ListAPIView):
   serializer_class = UserSerializer
   permission_classes = [AllowAny]
 
+class CheckUsernameView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        username = request.data.get('username')
+        if not username:
+            return Response({'error': 'Username is required'}, status=400)
+            
+        exists = User.objects.filter(username=username).exists()
+        return Response({
+            'exists': exists,
+            'message': 'Username already exists' if exists else 'Username is available'
+        })
+
 # class UserView(APIView):
 #   permission_classes = [IsAuthenticated]
 #   def get(self, request):
