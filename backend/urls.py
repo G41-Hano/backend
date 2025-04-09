@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
-from api.views import CreateUserView, UserListView, CustomTokenView, CheckUsernameView
+from api.views import CreateUserView, UserListView, CustomTokenView, CheckUsernameView, RequestPasswordReset, ResetPassword
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 # API endpoints
@@ -12,4 +12,6 @@ urlpatterns = [
     path("api/token/", CustomTokenView.as_view(), name="get_token"),
     path("api/token/refresh", TokenRefreshView.as_view(), name="refresh"),
     path("api-auth/", include("rest_framework.urls")),
+    path('api/password-reset/', RequestPasswordReset.as_view(), name='password_reset_request'),
+    path('api/reset-password/<str:token>/', ResetPassword.as_view(), name='password_reset'),
 ]
