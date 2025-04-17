@@ -15,6 +15,7 @@ from datetime import timedelta
 from dotenv import load_dotenv
 import os
 from urllib.parse import urlparse
+from decouple import config
 
 load_dotenv()
 
@@ -23,12 +24,27 @@ tmpPostgres = urlparse(os.getenv("DATABASE_URL"))
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-#4ir-5hxvzya$r3um3_hfiiz)7an(%+k@3350j%#pgfjbu3piz'
+
+# Email backend settings, 
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  #for real Email Backend Production
+
+#EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' # for testing, prints the email content to the console instead of actually sending it
+
+# Password reset base URL
+PASSWORD_RESET_BASE_URL = config('PASSWORD_RESET_BASE_URL')  # Reads from .env file
+
+# Pull values from .env file using config()
+EMAIL_HOST = config('EMAIL_HOST')  # Reads from .env file
+EMAIL_PORT = config('EMAIL_PORT', cast=int)  # Reads and converts to integer
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)  # Reads and converts to boolean
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')  # Your Gmail address
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')  # Your Gmail app password
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')  # Sender email
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
