@@ -1,7 +1,7 @@
-from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Role
+from .models import User, Role
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from .utils.encryption import encrypt, decrypt
 
 # Serializers that convert the Django Object to JSON, and vice versa
 
@@ -11,8 +11,8 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
     token = super().get_token(user)
 
     # Add custom claims
-    token['first_name'] = user.first_name
-    token['last_name'] = user.last_name
+    token['first_name'] = user.get_decrypted_first_name()
+    token['last_name'] = user.get_decrypted_last_name()
     token['role'] = user.role.name
     # ...
 
@@ -25,14 +25,35 @@ class UserSerializer(serializers.ModelSerializer):
 
   class Meta:
     model = User
-    fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input"]
-    extra_kwargs = {"password": {"write_only": True}}     # exclude this data when it is requested
+    fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted"]
+    extra_kwargs = {"password": {"write_only": True},
+                    "first_name_encrypted": {"read_only": True},
+                    "last_name_encrypted": {"read_only": True},
+                    }     # exclude this data when it is requested
 
   def create(self, validated_data):
-    role_name = validated_data.pop("role_input")                # Extract role from data
+    role_name = validated_data.pop("role_input")          # Extract role from data
     user = User.objects.create_user(**validated_data)     # Create user object (password already hashed)
     Role.objects.create(user=user, name=role_name)        # Create role object (to know if user is student or teacher)
     return user
+  
+  def to_representation(self, instance):
+    """Decrypt first and last name for output"""
+    ret = super().to_representation(instance)
+
+    # Decrypt first name using the model method
+    try:
+      ret['first_name'] = instance.get_decrypted_first_name()
+    except Exception as e:
+      ret['first_name'] = "ERROR NAME"
+    
+    # Decrypt last name using the model method
+    try:
+      ret['last_name'] = instance.get_decrypted_last_name()
+    except Exception as e:
+      ret['last_name'] = "ERROR NAME"
+
+    return ret
   
 class ResetPasswordRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)

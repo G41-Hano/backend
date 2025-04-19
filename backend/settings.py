@@ -46,6 +46,9 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER')  # Your Gmail address
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')  # Your Gmail app password
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')  # Sender email
 
+# KEY for ENCRYPTING/DECRYPTING data
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY").encode()
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
@@ -171,3 +174,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWS_CREDENTIALS = True
+
+AUTH_USER_MODEL = 'api.User'
