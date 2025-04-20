@@ -1,5 +1,8 @@
 from django.shortcuts import render
 from django.contrib.auth.models import User
+from django.core.mail import send_mail
+from django.template.loader import render_to_string
+from django.utils.html import strip_tags
 from .models import PasswordReset
 from rest_framework import generics
 from rest_framework.views import APIView
@@ -10,6 +13,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from rest_framework import status
 import os
+import secrets
+from django.conf import settings
 
 # Create your views here.
 
@@ -56,12 +61,26 @@ class RequestPasswordReset(generics.GenericAPIView):
           user = User.objects.filter(email__iexact=email).first()
 
           if user:
-              token_generator = PasswordResetTokenGenerator()
-              token = token_generator.make_token(user) 
+              token = secrets.token_urlsafe(48)
               reset = PasswordReset(email=email, token=token)
               reset.save()
-
-              reset_url = f"{os.environ['PASSWORD_RESET_BASE_URL']}/{token}"
+              
+              reset_url = f"{settings.PASSWORD_RESET_BASE_URL}/{token}"
+              
+              # Render the HTML email template with context
+              subject = "Password Reset Request"
+              html_message = render_to_string('emails/password_reset_email.html', {'reset_url': reset_url})
+              plain_message = strip_tags(html_message)  # Converts HTML to plain text
+              from_email = settings.DEFAULT_FROM_EMAIL
+              
+              # Send the email
+              send_mail(
+                 subject,  # Email subject
+                 plain_message,  # Plain text message
+                 from_email,  # From email
+                 [email],  # Recipient email
+                 html_message=html_message  # HTML message
+            )
 
               return Response({'success': 'We have sent you a link to reset your password'}, status=status.HTTP_200_OK)
           else:
@@ -86,8 +105,10 @@ class ResetPassword(generics.GenericAPIView):
         
         reset_obj = PasswordReset.objects.filter(token=token).first()
         
-        if not reset_obj:
-            return Response({'error':'Invalid token'}, status=400)
+        if not reset_obj or reset_obj.is_expired():
+            if reset_obj:
+              reset_obj.delete()
+            return Response({'error':'Invalid or expired token'}, status=400)
         
         user = User.objects.filter(email=reset_obj.email).first()
         

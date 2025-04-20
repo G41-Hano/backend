@@ -1,3 +1,5 @@
+from datetime import timedelta
+from django.utils import timezone
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -22,3 +24,13 @@ class PasswordReset(models.Model):
   email = models.EmailField()
   token = models.CharField(max_length=100)
   created_at = models.DateTimeField(auto_now_add=True)
+  expires_at = models.DateTimeField(default=timezone.now() + timedelta(hours=1))  # Default set to 1 hour from now
+
+  def is_expired(self):
+    return timezone.now() > self.expires_at
+
+  def save(self, *args, **kwargs):
+    if not self.expires_at:
+      self.expires_at = timezone.now() + timedelta(hours=1)
+    super().save(*args, **kwargs)
+
