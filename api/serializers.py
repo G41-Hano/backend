@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Role
+from .models import User, Role, Classroom
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .utils.encryption import encrypt, decrypt
 
@@ -65,3 +65,42 @@ class ResetPasswordSerializer(serializers.Serializer):
         error_messages={'invalid': ('Password must be at least 8 characters long with at least one capital letter and symbol')})
     
     confirm_password = serializers.CharField(write_only=True, required=True)
+
+class ClassroomSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.SerializerMethodField()
+    student_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Classroom
+        fields = ['id', 'name', 'description', 'created_at', 'updated_at', 'teacher', 'teacher_name', 'student_count']
+        read_only_fields = ['created_at', 'updated_at', 'teacher']
+
+    def validate_name(self, value):
+        # Check for duplicate names for the same teacher
+        request = self.context.get('request')
+        if request and request.user:
+            if Classroom.objects.filter(teacher=request.user, name=value).exists():
+                if self.instance and self.instance.name == value:  # Skip if it's an update with same name
+                    return value
+                raise serializers.ValidationError("You already have a classroom with this name")
+        
+        # Check name length and format
+        value = value.strip()
+        if len(value) < 3:
+            raise serializers.ValidationError("Classroom name must be at least 3 characters long")
+        if len(value) > 50:
+            raise serializers.ValidationError("Classroom name cannot exceed 50 characters")
+        
+        return value
+
+    def get_teacher_name(self, obj):
+        return f"{obj.teacher.get_decrypted_first_name()} {obj.teacher.get_decrypted_last_name()}"
+
+    def get_student_count(self, obj):
+        return obj.students.count()
+
+    def create(self, validated_data):
+        # Get the teacher from the request context
+        teacher = self.context['request'].user
+        validated_data['teacher'] = teacher
+        return super().create(validated_data)

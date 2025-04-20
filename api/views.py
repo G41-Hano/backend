@@ -1,13 +1,12 @@
 from django.shortcuts import render
-from .models import User
+from .models import User, PasswordReset, Classroom
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from .models import PasswordReset
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer
+from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -121,3 +120,168 @@ class ResetPassword(generics.GenericAPIView):
             return Response({'success':'Password updated successfully'})
         else: 
             return Response({'error':'No user found'}, status=404)
+
+class ClassroomListView(generics.ListCreateAPIView):
+    serializer_class = ClassroomSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role.name == 'teacher':
+            return Classroom.objects.filter(teacher=user)
+        else:
+            return Classroom.objects.filter(students=user)
+
+    def create(self, request, *args, **kwargs):
+        if request.user.role.name != 'teacher':
+            return Response(
+                {"error": "Only teachers can create classrooms"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+
+class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ClassroomSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Classroom.objects.all()
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role.name == 'teacher':
+            return Classroom.objects.filter(teacher=user)
+        else:
+            return Classroom.objects.filter(students=user)
+
+    def update(self, request, *args, **kwargs):
+        if request.user.role.name != 'teacher':
+            return Response(
+                {"error": "Only teachers can update classrooms"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if request.user.role.name != 'teacher':
+            return Response(
+                {"error": "Only teachers can delete classrooms"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().destroy(request, *args, **kwargs)
+
+class ClassroomStudentsView(APIView):
+    permission_classes = [IsAuthenticated]
+    MAX_STUDENTS = 50  # Maximum students per classroom
+
+    def post(self, request, pk):
+        # Check if user is a teacher
+        if request.user.role.name != 'teacher':
+            return Response(
+                {"error": "Only teachers can add students"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            classroom = Classroom.objects.get(pk=pk, teacher=request.user)
+            student_ids = request.data.get('student_ids', [])
+            
+            # Check if student_ids is empty
+            if not student_ids:
+                return Response(
+                    {"error": "No student IDs provided"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check student limit
+            current_students = classroom.students.count()
+            if current_students + len(student_ids) > self.MAX_STUDENTS:
+                return Response(
+                    {
+                        "error": f"Cannot add students. Maximum limit is {self.MAX_STUDENTS}. "
+                        f"Current count: {current_students}"
+                    }, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if any students are already enrolled
+            already_enrolled = classroom.students.filter(id__in=student_ids).values_list('id', flat=True)
+            if already_enrolled:
+                return Response(
+                    {
+                        "error": "Some students are already enrolled",
+                        "already_enrolled_ids": list(already_enrolled)
+                    }, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Verify all users exist and are students
+            students = User.objects.filter(id__in=student_ids, role__name='student')
+            if len(students) != len(student_ids):
+                invalid_ids = set(student_ids) - set(students.values_list('id', flat=True))
+                return Response(
+                    {
+                        "error": "Some user IDs are invalid or not students",
+                        "invalid_ids": list(invalid_ids)
+                    }, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            classroom.students.add(*students)
+            return Response(
+                {
+                    'success': 'Students added successfully',
+                    'added_count': len(students),
+                    'total_students': classroom.students.count()
+                },
+                status=status.HTTP_200_OK
+            )
+        except Classroom.DoesNotExist:
+            return Response(
+                {'error': 'Classroom not found or you are not the teacher'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    def delete(self, request, pk):
+        # Check if user is a teacher
+        if request.user.role.name != 'teacher':
+            return Response(
+                {"error": "Only teachers can remove students"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            classroom = Classroom.objects.get(pk=pk, teacher=request.user)
+            student_ids = request.data.get('student_ids', [])
+            
+            # Check if student_ids is empty
+            if not student_ids:
+                return Response(
+                    {"error": "No student IDs provided"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Verify students are in the classroom
+            enrolled_students = classroom.students.filter(id__in=student_ids)
+            if len(enrolled_students) != len(student_ids):
+                not_enrolled = set(student_ids) - set(enrolled_students.values_list('id', flat=True))
+                return Response(
+                    {
+                        "error": "Some students are not enrolled in this classroom",
+                        "not_enrolled_ids": list(not_enrolled)
+                    }, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            classroom.students.remove(*enrolled_students)
+            return Response(
+                {
+                    'success': 'Students removed successfully',
+                    'removed_count': len(enrolled_students),
+                    'total_students': classroom.students.count()
+                },
+                status=status.HTTP_200_OK
+            )
+        except Classroom.DoesNotExist:
+            return Response(
+                {'error': 'Classroom not found or you are not the teacher'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )

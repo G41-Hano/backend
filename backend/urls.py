@@ -1,6 +1,10 @@
 from django.contrib import admin
 from django.urls import path, include
-from api.views import CreateUserView, UserListView, CustomTokenView, CheckUsernameView, RequestPasswordReset, ResetPassword
+from api.views import (
+    CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
+    RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
+    ClassroomStudentsView
+)
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 # API endpoints
@@ -14,4 +18,9 @@ urlpatterns = [
     path("api-auth/", include("rest_framework.urls")),
     path('api/password-reset/', RequestPasswordReset.as_view(), name='password_reset_request'),
     path('api/reset-password/<str:token>/', ResetPassword.as_view(), name='password_reset'),
+    
+    # Classroom URLs
+    path('api/classrooms/', ClassroomListView.as_view(), name='classroom_list'),
+    path('api/classrooms/<int:pk>/', ClassroomDetailView.as_view(), name='classroom_detail'),
+    path('api/classrooms/<int:pk>/students/', ClassroomStudentsView.as_view(), name='classroom_students'),
 ]
