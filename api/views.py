@@ -121,7 +121,7 @@ class ResetPassword(generics.GenericAPIView):
         else: 
             return Response({'error':'No user found'}, status=404)
 
-class ClassroomListView(generics.ListCreateAPIView):
+class ClassroomListView(generics.ListCreateAPIView): # creates the classroom and displays classrooms of the teacher
     serializer_class = ClassroomSerializer
     permission_classes = [IsAuthenticated]
 
@@ -140,7 +140,7 @@ class ClassroomListView(generics.ListCreateAPIView):
             )
         return super().create(request, *args, **kwargs)
 
-class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView):
+class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView): # updates and deletes a classroom
     serializer_class = ClassroomSerializer
     permission_classes = [IsAuthenticated]
     queryset = Classroom.objects.all()
@@ -168,11 +168,54 @@ class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView):
             )
         return super().destroy(request, *args, **kwargs)
 
-class ClassroomStudentsView(APIView):
+class ClassroomStudentsView(APIView): # enroll and delete students in a classroom
     permission_classes = [IsAuthenticated]
     MAX_STUDENTS = 50  # Maximum students per classroom
 
+    def get(self, request, pk):
+        """
+        Get a list of students enrolled in the classroom.
+        """
+        try:
+            classroom = Classroom.objects.get(pk=pk)
+            if request.user != classroom.teacher and request.user not in classroom.students.all():
+                return Response(
+                    {"error": "You don't have permission to view this classroom's students"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            students = classroom.students.all()
+            return Response({
+                'count': students.count(),
+                'students': [
+                    {
+                        'id': student.id,
+                        'username': student.username,
+                        'name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}"
+                    } for student in students
+                ]
+            })
+        except Classroom.DoesNotExist:
+            return Response(
+                {'error': 'Classroom not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
     def post(self, request, pk):
+        """
+        Add students to the classroom.
+        
+        Expects a JSON body with:
+        {
+            "student_ids": [1, 2, 3]  // List of student user IDs to enroll
+        }
+        
+        Rules:
+        - Only teachers can add students
+        - Maximum 50 students per classroom
+        - Cannot add already enrolled students
+        - Can only add users with student role
+        """
         # Check if user is a teacher
         if request.user.role.name != 'teacher':
             return Response(
@@ -241,6 +284,18 @@ class ClassroomStudentsView(APIView):
             )
 
     def delete(self, request, pk):
+        """
+        Remove students from the classroom.
+        
+        Expects a JSON body with:
+        {
+            "student_ids": [1, 2, 3]  // List of student user IDs to remove
+        }
+        
+        Rules:
+        - Only teachers can remove students
+        - Can only remove enrolled students
+        """
         # Check if user is a teacher
         if request.user.role.name != 'teacher':
             return Response(
