@@ -3,7 +3,7 @@ from django.urls import path, include
 from api.views import (
     CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
-    ClassroomStudentsView
+    ClassroomStudentsView, JoinClassroomView
 )
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
@@ -23,4 +23,5 @@ urlpatterns = [
     path('api/classrooms/', ClassroomListView.as_view(), name='classroom_list'),
     path('api/classrooms/<int:pk>/', ClassroomDetailView.as_view(), name='classroom_detail'),
     path('api/classrooms/<int:pk>/students/', ClassroomStudentsView.as_view(), name='classroom_students'),
+    path('api/classrooms/join/', JoinClassroomView.as_view(), name='join_classroom'),
 ]

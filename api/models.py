@@ -71,9 +71,29 @@ class Classroom(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     teacher = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='classrooms')
     students = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='enrolled_classrooms', blank=True)
+    class_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
+    color = models.CharField(max_length=7, default='#7D83D7') 
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.class_code:
+            self.class_code = self.generate_class_code()
+        super().save(*args, **kwargs)
+
+    def generate_class_code(self):
+        import random
+        import string
+        
+        # Generate a random 6-character code
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
+        # Check if code already exists
+        while Classroom.objects.filter(class_code=code).exists():
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
+        return code
 
     class Meta:
         ordering = ['-created_at']

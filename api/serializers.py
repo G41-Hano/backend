@@ -72,8 +72,8 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Classroom
-        fields = ['id', 'name', 'description', 'created_at', 'updated_at', 'teacher', 'teacher_name', 'student_count']
-        read_only_fields = ['created_at', 'updated_at', 'teacher']
+        fields = ['id', 'name', 'description', 'created_at', 'updated_at', 'teacher', 'teacher_name', 'student_count', 'class_code', 'color']
+        read_only_fields = ['created_at', 'updated_at', 'teacher', 'class_code']
 
     def validate_name(self, value):
         # Check for duplicate names for the same teacher

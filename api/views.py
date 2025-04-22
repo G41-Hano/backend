@@ -28,7 +28,14 @@ class CreateUserView(generics.CreateAPIView):
 class UserListView(generics.ListAPIView):
   queryset = User.objects.all()
   serializer_class = UserSerializer
-  permission_classes = [AllowAny]
+  permission_classes = [IsAuthenticated]
+
+  def get_queryset(self):
+    queryset = User.objects.all()
+    role = self.request.query_params.get('role', None)
+    if role:
+        queryset = queryset.filter(role__name=role)
+    return queryset
 
 class CheckUsernameView(APIView):
     permission_classes = [AllowAny]
@@ -338,5 +345,74 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
         except Classroom.DoesNotExist:
             return Response(
                 {'error': 'Classroom not found or you are not the teacher'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+class JoinClassroomView(APIView):
+    """
+    View for students to join a classroom using a class code.
+    """
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request):
+        """
+        Join a classroom using a class code.
+        
+        Expects a JSON body with:
+        {
+            "class_code": "ABC123"  // The class code to join
+        }
+        
+        Rules:
+        - Only students can join classrooms
+        - Class code must be valid
+        - Student must not be already enrolled
+        - Classroom must not be at maximum capacity
+        """
+        # Check if user is a student
+        if request.user.role.name != 'student':
+            return Response(
+                {"error": "Only students can join classrooms"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        class_code = request.data.get('class_code')
+        if not class_code:
+            return Response(
+                {"error": "Class code is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            classroom = Classroom.objects.get(class_code=class_code)
+            
+            # Check if student is already enrolled
+            if request.user in classroom.students.all():
+                return Response(
+                    {"error": "You are already enrolled in this classroom"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Check if classroom is at maximum capacity
+            if classroom.students.count() >= 50:  # Using the same limit as ClassroomStudentsView
+                return Response(
+                    {"error": "This classroom is at maximum capacity"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Add student to classroom
+            classroom.students.add(request.user)
+            
+            return Response(
+                {
+                    'success': 'Successfully joined the classroom',
+                    'classroom_id': classroom.id,
+                    'classroom_name': classroom.name
+                },
+                status=status.HTTP_200_OK
+            )
+        except Classroom.DoesNotExist:
+            return Response(
+                {"error": "Invalid class code"}, 
                 status=status.HTTP_404_NOT_FOUND
             )
