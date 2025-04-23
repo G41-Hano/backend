@@ -25,7 +25,7 @@ class UserSerializer(serializers.ModelSerializer):
 
   class Meta:
     model = User
-    fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted"]
+    fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar"]
     extra_kwargs = {"password": {"write_only": True},
                     "first_name_encrypted": {"read_only": True},
                     "last_name_encrypted": {"read_only": True},
@@ -69,10 +69,12 @@ class ResetPasswordSerializer(serializers.Serializer):
 class ClassroomSerializer(serializers.ModelSerializer):
     teacher_name = serializers.SerializerMethodField()
     student_count = serializers.SerializerMethodField()
+    students = serializers.SerializerMethodField()
 
     class Meta:
         model = Classroom
-        fields = ['id', 'name', 'description', 'created_at', 'updated_at', 'teacher', 'teacher_name', 'student_count', 'class_code', 'color']
+        fields = ['id', 'name', 'description', 'created_at', 'updated_at', 'teacher', 'teacher_name', 
+                 'student_count', 'class_code', 'color', 'student_color', 'is_hidden', 'students', 'order']
         read_only_fields = ['created_at', 'updated_at', 'teacher', 'class_code']
 
     def validate_name(self, value):
@@ -98,6 +100,17 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
     def get_student_count(self, obj):
         return obj.students.count()
+
+    def get_students(self, obj):
+        request = self.context.get('request')
+        return [
+            {
+                'id': student.id,
+                'username': student.username,
+                'name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}",
+                'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar and student.avatar.name else None
+            } for student in obj.students.all()
+        ]
 
     def create(self, validated_data):
         # Get the teacher from the request context

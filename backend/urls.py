@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from api.views import (
     CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
@@ -25,3 +27,7 @@ urlpatterns = [
     path('api/classrooms/<int:pk>/students/', ClassroomStudentsView.as_view(), name='classroom_students'),
     path('api/classrooms/join/', JoinClassroomView.as_view(), name='join_classroom'),
 ]
+
+# Serve media files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

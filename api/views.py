@@ -135,9 +135,9 @@ class ClassroomListView(generics.ListCreateAPIView): # creates the classroom and
     def get_queryset(self):
         user = self.request.user
         if user.role.name == 'teacher':
-            return Classroom.objects.filter(teacher=user)
+            return Classroom.objects.filter(teacher=user).order_by('order', '-created_at')
         else:
-            return Classroom.objects.filter(students=user)
+            return Classroom.objects.filter(students=user).order_by('order', '-created_at')
 
     def create(self, request, *args, **kwargs):
         if request.user.role.name != 'teacher':
@@ -145,6 +145,12 @@ class ClassroomListView(generics.ListCreateAPIView): # creates the classroom and
                 {"error": "Only teachers can create classrooms"}, 
                 status=status.HTTP_403_FORBIDDEN
             )
+        
+        # Set the order to be the last in the list
+        last_classroom = Classroom.objects.filter(teacher=request.user).order_by('-order').first()
+        next_order = (last_classroom.order + 1) if last_classroom else 0
+        request.data['order'] = next_order
+        
         return super().create(request, *args, **kwargs)
 
 class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView): # updates and deletes a classroom
@@ -160,6 +166,23 @@ class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView): # updates and 
             return Classroom.objects.filter(students=user)
 
     def update(self, request, *args, **kwargs):
+        # Allow students to update only student_color, is_hidden, and order
+        if request.user.role.name == 'student':
+            if set(request.data.keys()) - {'student_color', 'is_hidden', 'order'}:
+                return Response(
+                    {"error": "Students can only update their color preference, visibility, and order"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            # Verify student is enrolled in this classroom
+            classroom = self.get_object()
+            if request.user not in classroom.students.all():
+                return Response(
+                    {"error": "You are not enrolled in this classroom"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            return super().update(request, *args, **kwargs)
+        
+        # For teachers, allow all updates
         if request.user.role.name != 'teacher':
             return Response(
                 {"error": "Only teachers can update classrooms"}, 
@@ -198,7 +221,8 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                     {
                         'id': student.id,
                         'username': student.username,
-                        'name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}"
+                        'name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}",
+                        'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None
                     } for student in students
                 ]
             })
