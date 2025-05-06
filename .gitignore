@@ -6,10 +6,11 @@ db.sqlite3
 *.pyo
 __pycache__/
 
-# Ignore virtual environments
+# Dependency directories
 env/
 venv/
 .env
+node_modules/
 
 # Ignore IDE settings
 .vscode/
@@ -18,3 +19,4 @@ venv/
 # Ignore system files
 .DS_Store
 Thumbs.db
+
