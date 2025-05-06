@@ -37,7 +37,7 @@ def decrypt(data):
     None: if data is empty or does not exist
   """
   if data:
-    print("data is of type: ",type(data))
+    # print("data is of type: ",type(data))
     if isinstance(data, memoryview):
       data = data.tobytes()
        

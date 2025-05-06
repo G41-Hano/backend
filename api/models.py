@@ -102,3 +102,47 @@ class Classroom(models.Model):
     class Meta:
         ordering = ['order', '-created_at']  # Order by position first, then creation date
 
+
+class WordList(models.Model):
+  id = models.AutoField(primary_key=True)
+  name = models.CharField(max_length=20)
+  description = models.CharField(max_length=200)
+
+class Vocabulary(models.Model):
+  word = models.CharField(max_length=20)
+  definition = models.CharField(max_length=200)
+  # FILE FIELD for IMAGE or VIDEO
+  list = models.ForeignKey(WordList, on_delete=models.CASCADE, related_name="words")
+   
+class Drill(models.Model):
+  id = models.AutoField(primary_key=True)
+  title = models.TextField(max_length=20)
+  description = models.TextField(blank=True, null=True)
+  created_at = models.DateTimeField(auto_now_add=True)
+  deadline = models.DateTimeField()
+  total_run = models.PositiveIntegerField(default=1)  # how many times the student will take the drill 
+  created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drills')
+  classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='drills')
+
+class DrillQuestion(models.Model):
+  TYPE = [
+    ("M","Multiple Choice"),
+    ("D","Drag and Drop"),
+    ("F","Fill in the Blank"),
+  ]
+
+  id = models.AutoField(primary_key=True)
+  text = models.TextField(max_length=200)
+  type = models.CharField(choices=TYPE, default='M', max_length=1)
+  answer = models.CharField(max_length=20)
+  drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='questions')
+
+class DrillResult(models.Model):
+  id = models.AutoField(primary_key=True)
+  student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drill_results')
+  drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='drill_results')
+  run_number = models.IntegerField(4)
+  start_time = models.DateTimeField(auto_now_add=True)
+  completion_time = models.DateTimeField()
+  points = models.FloatField()
+  
