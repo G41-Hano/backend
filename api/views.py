@@ -440,3 +440,46 @@ class JoinClassroomView(APIView):
                 {"error": "Invalid class code"}, 
                 status=status.HTTP_404_NOT_FOUND
             )
+
+# Profile View
+class ProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request):
+        """Get the current user's profile information"""
+        user = request.user
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.get_decrypted_first_name(),
+            'last_name': user.get_decrypted_last_name(),
+            'role': user.role.name,
+            'avatar': request.build_absolute_uri(user.avatar.url) if user.avatar else None
+        })
+    
+    def put(self, request):
+        """Update the current user's profile information"""
+        user = request.user
+        
+        # Update fields if provided
+        if 'email' in request.data:
+            user.email = request.data['email']
+        if 'first_name' in request.data:
+            user.first_name = request.data['first_name']
+        if 'last_name' in request.data:
+            user.last_name = request.data['last_name']
+        if 'avatar' in request.data:
+            user.avatar = request.data['avatar']
+            
+        user.save()
+        
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'first_name': user.get_decrypted_first_name(),
+            'last_name': user.get_decrypted_last_name(),
+            'role': user.role.name,
+            'avatar': request.build_absolute_uri(user.avatar.url) if user.avatar else None
+        })
