@@ -116,13 +116,18 @@ class Vocabulary(models.Model):
    
 class Drill(models.Model):
   id = models.AutoField(primary_key=True)
-  title = models.TextField(max_length=20)
+  title = models.TextField(max_length=50)
   description = models.TextField(blank=True, null=True)
   created_at = models.DateTimeField(auto_now_add=True)
   deadline = models.DateTimeField()
   total_run = models.PositiveIntegerField(default=1)  # how many times the student will take the drill 
   created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drills')
   classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='drills')
+  STATUS_CHOICES = [
+    ('draft', 'Draft'),
+    ('published', 'Published'),
+  ]
+  status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
 
 class DrillQuestion(models.Model):
   TYPE = [
@@ -134,8 +139,18 @@ class DrillQuestion(models.Model):
   id = models.AutoField(primary_key=True)
   text = models.TextField(max_length=200)
   type = models.CharField(choices=TYPE, default='M', max_length=1)
-  answer = models.CharField(max_length=20)
   drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='questions')
+  dragItems = models.JSONField(default=list, blank=True, null=True)
+  dropZones = models.JSONField(default=list, blank=True, null=True)
+  blankPosition = models.IntegerField(blank=True, null=True)
+
+class DrillChoice(models.Model):
+  id = models.AutoField(primary_key=True)
+  question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='choices')
+  text = models.CharField(max_length=200, blank=True)
+  image = models.ImageField(upload_to='drill_choices/images/', null=True, blank=True)
+  video = models.FileField(upload_to='drill_choices/videos/', null=True, blank=True)
+  is_correct = models.BooleanField(default=False)
 
 class DrillResult(models.Model):
   id = models.AutoField(primary_key=True)
