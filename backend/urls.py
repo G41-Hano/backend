@@ -5,7 +5,8 @@ from django.conf.urls.static import static
 from api.views import (
     CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
-    ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView
+    ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
+    ClassroomStudentsView, JoinClassroomView, ProfileView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -21,6 +22,9 @@ urlpatterns = [
     path("api-auth/", include("rest_framework.urls")),
     path('api/password-reset/', RequestPasswordReset.as_view(), name='password_reset_request'),
     path('api/reset-password/<str:token>/', ResetPassword.as_view(), name='password_reset'),
+
+    # Profile URLs
+    path('api/profile/', ProfileView.as_view(), name='profile'),
     
     # Classroom URLs
     path('api/classrooms/', ClassroomListView.as_view(), name='classroom_list'),
