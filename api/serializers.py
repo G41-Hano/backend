@@ -74,7 +74,7 @@ class ClassroomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classroom
         fields = ['id', 'name', 'description', 'created_at', 'updated_at', 'teacher', 'teacher_name', 
-                 'student_count', 'class_code', 'color', 'student_color', 'is_hidden', 'students', 'order']
+                 'student_count', 'class_code', 'color', 'student_color', 'is_hidden', 'is_archived', 'students', 'order']
         read_only_fields = ['created_at', 'updated_at', 'teacher', 'class_code']
 
     def validate_name(self, value):

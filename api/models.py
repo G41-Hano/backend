@@ -76,6 +76,7 @@ class Classroom(models.Model):
     color = models.CharField(max_length=7, default='#7D83D7')  # Default color
     student_color = models.CharField(max_length=7, null=True, blank=True)  # Student's custom color
     is_hidden = models.BooleanField(default=False)  # Hidden state
+    is_archived = models.BooleanField(default=False)  # Archived state
     order = models.IntegerField(default=0)  # Order for sorting
 
     def __str__(self):
