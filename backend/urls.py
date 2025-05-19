@@ -6,7 +6,7 @@ from api.views import (
     CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
-    ClassroomStudentsView, JoinClassroomView, ProfileView
+    ClassroomStudentsView, JoinClassroomView, ProfileView, import_students_from_csv
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -31,7 +31,8 @@ urlpatterns = [
     path('api/classrooms/<int:pk>/', ClassroomDetailView.as_view(), name='classroom_detail'),
     path('api/classrooms/<int:pk>/students/', ClassroomStudentsView.as_view(), name='classroom_students'),
     path('api/classrooms/join/', JoinClassroomView.as_view(), name='join_classroom'),
-
+    path('api/classrooms/<int:pk>/import-students/', import_students_from_csv, name='import_students_from_csv'), # import students from csv
+    
     # Drill URLs
     path('api/drills/', DrillListCreateView.as_view(), name='drill_list_create'),
     path('api/drills/<int:pk>/', DrillRetrieveUpdateDestroyView.as_view(), name='drill_detail'),
