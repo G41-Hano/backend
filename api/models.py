@@ -134,6 +134,7 @@ class DrillQuestion(models.Model):
     ("M","Multiple Choice"),
     ("D","Drag and Drop"),
     ("F","Fill in the Blank"),
+    ("G","Memory Game"),  
   ]
 
   id = models.AutoField(primary_key=True)
@@ -143,6 +144,7 @@ class DrillQuestion(models.Model):
   dragItems = models.JSONField(default=list, blank=True, null=True)
   dropZones = models.JSONField(default=list, blank=True, null=True)
   blankPosition = models.IntegerField(blank=True, null=True)
+  memoryCards = models.JSONField(default=list, blank=True, null=True)  # New field for memory game cards
 
 class DrillChoice(models.Model):
   id = models.AutoField(primary_key=True)
@@ -160,4 +162,13 @@ class DrillResult(models.Model):
   start_time = models.DateTimeField(auto_now_add=True)
   completion_time = models.DateTimeField()
   points = models.FloatField()
+
+class MemoryGameResult(models.Model):
+    id = models.AutoField(primary_key=True)
+    drill_result = models.ForeignKey(DrillResult, on_delete=models.CASCADE, related_name='memory_game_results')
+    question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='memory_game_results')
+    attempts = models.IntegerField(default=0)
+    matches = models.JSONField(default=list)  # Store matched pairs
+    time_taken = models.FloatField()  # Time taken in seconds
+    score = models.FloatField()  # Score based on attempts and time
   

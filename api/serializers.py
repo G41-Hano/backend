@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Role, Classroom, Drill, DrillQuestion, DrillChoice
+from .models import User, Role, Classroom, Drill, DrillQuestion, DrillChoice, MemoryGameResult
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .utils.encryption import encrypt, decrypt
 
@@ -128,10 +128,30 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     dragItems = serializers.JSONField(required=False)
     dropZones = serializers.JSONField(required=False)
     blankPosition = serializers.IntegerField(required=False, allow_null=True)
+    memoryCards = serializers.JSONField(required=False)
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition']
+        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards']
+
+    def validate(self, data):
+        if data.get('type') == 'G':  # Memory Game type
+            if not data.get('memoryCards'):
+                raise serializers.ValidationError("Memory cards are required for memory game questions")
+            cards = data['memoryCards']
+            if not isinstance(cards, list):
+                raise serializers.ValidationError("Memory cards must be a list")
+            if len(cards) < 2:
+                raise serializers.ValidationError("At least 2 cards are required for a memory game")
+            if len(cards) % 2 != 0:
+                raise serializers.ValidationError("Number of cards must be even for matching pairs")
+            # Validate each card has required fields
+            for card in cards:
+                if not isinstance(card, dict):
+                    raise serializers.ValidationError("Each card must be an object")
+                if 'id' not in card or 'content' not in card or 'pairId' not in card:
+                    raise serializers.ValidationError("Each card must have id, content, and pairId fields")
+        return data
 
 class DrillSerializer(serializers.ModelSerializer):
     questions = serializers.SerializerMethodField()
@@ -153,9 +173,11 @@ class DrillSerializer(serializers.ModelSerializer):
             questions_data = json.loads(questions_data)
         drill = Drill.objects.create(**validated_data)
         for q_idx, question_data in enumerate(questions_data):
-            choices_data = question_data.pop('choices')
+            choices_data = question_data.pop('choices', [])
             question_data.pop('answer', None)
             question = DrillQuestion.objects.create(drill=drill, **question_data)
+            
+            # Handle choices for multiple choice and fill in the blank
             for c_idx, choice_data in enumerate(choices_data):
                 media_key = choice_data.pop('media', None)
                 image = None
@@ -173,6 +195,20 @@ class DrillSerializer(serializers.ModelSerializer):
                     image=image,
                     video=video,
                 )
+            
+            # Handle memory game cards
+            if question_data.get('type') == 'G':
+                memory_cards = question_data.get('memoryCards', [])
+                for c_idx, card_data in enumerate(memory_cards):
+                    media_key = card_data.get('media')
+                    if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
+                        file = request.FILES[media_key]
+                        if file.content_type.startswith('image/'):
+                            card_data['media'] = {'url': f'/media/drill_choices/images/{file.name}', 'type': file.content_type}
+                        elif file.content_type.startswith('video/'):
+                            card_data['media'] = {'url': f'/media/drill_choices/videos/{file.name}', 'type': file.content_type}
+                question.memoryCards = memory_cards
+                question.save()
         return drill
 
     def update(self, instance, validated_data):
@@ -381,3 +417,34 @@ class DrillSerializer(serializers.ModelSerializer):
         except Exception as e:
             print(f"Error in drill update: {e}")
             raise
+
+class MemoryGameResultSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MemoryGameResult
+        fields = ['id', 'drill_result', 'question', 'attempts', 'matches', 'time_taken', 'score']
+        read_only_fields = ['id', 'drill_result']
+
+    def validate(self, data):
+        # Validate that matches are valid pairs
+        matches = data.get('matches', [])
+        if not isinstance(matches, list):
+            raise serializers.ValidationError("Matches must be a list")
+        
+        # Get the question's memory cards
+        question = data['question']
+        if question.type != 'G':
+            raise serializers.ValidationError("Question must be a memory game type")
+        
+        cards = question.memoryCards
+        valid_pairs = set()
+        for card in cards:
+            valid_pairs.add(frozenset([card['id'], card['pairId']]))
+        
+        # Validate each match
+        for match in matches:
+            if not isinstance(match, list) or len(match) != 2:
+                raise serializers.ValidationError("Each match must be a pair of card IDs")
+            if frozenset(match) not in valid_pairs:
+                raise serializers.ValidationError(f"Invalid match: {match}")
+        
+        return data

@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from .models import User, PasswordReset, Classroom, Drill
+from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -15,6 +15,7 @@ import secrets
 from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.core.files.storage import default_storage
+from django.utils import timezone
 
 # Create your views here.
 
@@ -586,6 +587,7 @@ class DrillRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+        
 # Profile View
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -628,3 +630,82 @@ class ProfileView(APIView):
             'role': user.role.name,
             'avatar': request.build_absolute_uri(user.avatar.url) if user.avatar else None
         })
+
+class MemoryGameSubmissionView(APIView):
+    permission_classes = [IsAuthenticated]
+    
+    def post(self, request, drill_id, question_id):
+        try:
+            # Get the drill and question
+            drill = Drill.objects.get(id=drill_id)
+            question = DrillQuestion.objects.get(id=question_id, drill=drill)
+            
+            if question.type != 'G':
+                return Response(
+                    {"error": "Question is not a memory game type"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get or create drill result
+            drill_result, created = DrillResult.objects.get_or_create(
+                student=request.user,
+                drill=drill,
+                defaults={
+                    'run_number': 1,
+                    'completion_time': timezone.now(),
+                    'points': 0
+                }
+            )
+            
+            if not created:
+                drill_result.run_number += 1
+                drill_result.completion_time = timezone.now()
+                drill_result.save()
+            
+            # Calculate score based on attempts and time
+            attempts = request.data.get('attempts', 0)
+            time_taken = request.data.get('time_taken', 0)
+            matches = request.data.get('matches', [])
+            
+            # Score calculation
+            base_score = 100
+            attempt_penalty = attempts * 5  # 5 points penalty per attempt
+            time_penalty = time_taken * 0.1  # 0.1 points penalty per second
+            score = max(0, base_score - attempt_penalty - time_penalty)
+            
+            # Create memory game result
+            memory_result = MemoryGameResult.objects.create(
+                drill_result=drill_result,
+                question=question,
+                attempts=attempts,
+                matches=matches,
+                time_taken=time_taken,
+                score=score
+            )
+            
+            # Update drill result points
+            drill_result.points = score
+            drill_result.save()
+            
+            return Response({
+                'success': True,
+                'score': score,
+                'attempts': attempts,
+                'time_taken': time_taken
+            })
+            
+        except Drill.DoesNotExist:
+            return Response(
+                {"error": "Drill not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except DrillQuestion.DoesNotExist:
+            return Response(
+                {"error": "Question not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
