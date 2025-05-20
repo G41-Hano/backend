@@ -1,12 +1,12 @@
 from django.shortcuts import render
-from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult
+from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
-from rest_framework import generics
+from rest_framework import generics, viewsets, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer
+from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer, TransferRequestSerializer, NotificationSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -17,10 +17,11 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.core.files.storage import default_storage
 import pandas as pd
 from django.contrib.auth.hashers import make_password
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from api.utils.encryption import decrypt  # Import the decrypt function
 from cryptography.fernet import InvalidToken  # Import the InvalidToken exception
 from django.utils import timezone
+from django.db import models
 
 # Create your views here.
 
@@ -751,3 +752,157 @@ class MemoryGameSubmissionView(APIView):
                 {"error": str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+
+class IsTeacher(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.role.name == 'teacher'
+
+class TransferRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = TransferRequestSerializer
+    permission_classes = [IsAuthenticated, IsTeacher]
+
+    def get_queryset(self):
+        user = self.request.user
+        # Teachers can see requests they made or received
+        return TransferRequest.objects.filter(
+            models.Q(requested_by=user) | 
+            models.Q(to_classroom__teacher=user)
+        )
+
+    def perform_create(self, serializer):
+        # Create transfer request
+        transfer_request = serializer.save(requested_by=self.request.user)
+        
+        # Create notification for the receiving teacher
+        Notification.objects.create(
+            recipient=transfer_request.to_classroom.teacher,
+            type='student_transfer',
+            message=f"{transfer_request.requested_by.get_decrypted_first_name()} {transfer_request.requested_by.get_decrypted_last_name()} has requested to transfer {transfer_request.student.get_decrypted_first_name()} {transfer_request.student.get_decrypted_last_name()} to your classroom {transfer_request.to_classroom.name}",
+            data={
+                'transfer_request_id': transfer_request.id,
+                'student_id': transfer_request.student.id,
+                'student_name': f"{transfer_request.student.get_decrypted_first_name()} {transfer_request.student.get_decrypted_last_name()}",
+                'from_classroom_id': transfer_request.from_classroom.id,
+                'from_classroom_name': transfer_request.from_classroom.name,
+                'to_classroom_id': transfer_request.to_classroom.id,
+                'to_classroom_name': transfer_request.to_classroom.name
+            }
+        )
+
+    @action(detail=False, methods=['get'])
+    def available_classrooms(self, request):
+        """
+        Get all available classrooms for transfer requests.
+        Excludes the student's current classroom.
+        """
+        student_id = request.query_params.get('student_id')
+        if not student_id:
+            return Response(
+                {"error": "student_id is required"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            student = User.objects.get(id=student_id, role__name='student')
+            # Get the student's current classroom
+            current_classroom = Classroom.objects.filter(students=student).first()
+            
+            # Get all classrooms except the student's current one
+            available_classrooms = Classroom.objects.exclude(id=current_classroom.id if current_classroom else None)
+            
+            # Serialize the classrooms with request context
+            serializer = ClassroomSerializer(available_classrooms, many=True, context={'request': request})
+            return Response(serializer.data)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Student not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        transfer_request = self.get_object()
+        
+        # Check if the requesting user is the teacher of the target classroom
+        if request.user != transfer_request.to_classroom.teacher:
+            return Response(
+                {"error": "Only the receiving teacher can approve transfer requests"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Update transfer request status
+        transfer_request.status = 'approved'
+        transfer_request.save()
+
+        # Remove student from current classroom
+        transfer_request.from_classroom.students.remove(transfer_request.student)
+        
+        # Add student to new classroom
+        transfer_request.to_classroom.students.add(transfer_request.student)
+
+        # Create notification for the requesting teacher
+        Notification.objects.create(
+            recipient=transfer_request.requested_by,
+            type='transfer_approved',
+            message=f"Your request to transfer {transfer_request.student.get_decrypted_first_name()} {transfer_request.student.get_decrypted_last_name()} to {transfer_request.to_classroom.name} has been approved",
+            data={
+                'transfer_request_id': transfer_request.id,
+                'student_id': transfer_request.student.id,
+                'student_name': f"{transfer_request.student.get_decrypted_first_name()} {transfer_request.student.get_decrypted_last_name()}",
+                'classroom_id': transfer_request.to_classroom.id,
+                'classroom_name': transfer_request.to_classroom.name
+            }
+        )
+
+        return Response({"status": "approved"})
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        transfer_request = self.get_object()
+        
+        # Check if the requesting user is the teacher of the target classroom
+        if request.user != transfer_request.to_classroom.teacher:
+            return Response(
+                {"error": "Only the receiving teacher can reject transfer requests"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Update transfer request status
+        transfer_request.status = 'rejected'
+        transfer_request.save()
+
+        # Create notification for the requesting teacher
+        Notification.objects.create(
+            recipient=transfer_request.requested_by,
+            type='transfer_rejected',
+            message=f"Your request to transfer {transfer_request.student.get_decrypted_first_name()} {transfer_request.student.get_decrypted_last_name()} to {transfer_request.to_classroom.name} has been rejected",
+            data={
+                'transfer_request_id': transfer_request.id,
+                'student_id': transfer_request.student.id,
+                'student_name': f"{transfer_request.student.get_decrypted_first_name()} {transfer_request.student.get_decrypted_last_name()}",
+                'classroom_id': transfer_request.to_classroom.id,
+                'classroom_name': transfer_request.to_classroom.name
+            }
+        )
+
+        return Response({"status": "rejected"})
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(recipient=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        return Response({"status": "marked as read"})
+
+    @action(detail=False, methods=['post'])
+    def mark_all_as_read(self, request):
+        self.get_queryset().update(is_read=True)
+        return Response({"status": "all marked as read"})
