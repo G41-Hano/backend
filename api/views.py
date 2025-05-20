@@ -15,6 +15,11 @@ import secrets
 from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.core.files.storage import default_storage
+import pandas as pd
+from django.contrib.auth.hashers import make_password
+from rest_framework.decorators import api_view, permission_classes
+from api.utils.encryption import decrypt  # Import the decrypt function
+from cryptography.fernet import InvalidToken  # Import the InvalidToken exception
 from django.utils import timezone
 
 # Create your views here.
@@ -587,7 +592,7 @@ class DrillRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
 # Profile View
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -631,6 +636,43 @@ class ProfileView(APIView):
             'avatar': request.build_absolute_uri(user.avatar.url) if user.avatar else None
         })
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def import_students_from_csv(request, pk):
+    csv_file = request.FILES['csv_file']
+    df = pd.read_csv(csv_file)
+    df.columns = df.columns.str.strip()  # Remove extra spaces in headers
+    enrolled_user_ids = []
+
+    for _, row in df.iterrows():
+        first_name = str(row['First Name']).strip()
+        last_name = str(row['Last Name']).strip()
+        
+        # Try to decrypt the first and last names
+        try:
+            decrypted_first_name = decrypt(first_name) if first_name else None
+            decrypted_last_name = decrypt(last_name) if last_name else None
+        except InvalidToken:
+            # If decryption fails, use the plain text values
+            decrypted_first_name = first_name
+            decrypted_last_name = last_name
+        
+        # Find existing user by decrypted first and last name (case-insensitive)
+        for user in User.objects.all():
+            if (user.get_decrypted_first_name() or '').strip().lower() == first_name.lower() and \
+               (user.get_decrypted_last_name() or '').strip().lower() == last_name.lower():
+                enrolled_user_ids.append(user.id)
+                print(f"Enrolling existing user: {user.username}")
+                break
+        else:
+            print(f"No user found for: {first_name} {last_name}. Skipping.")
+
+    classroom = Classroom.objects.get(pk=pk)
+    classroom.students.add(*enrolled_user_ids)
+    print("Enrolled students:", classroom.students.all())
+
+    return Response({"success": f"Enrolled {len(enrolled_user_ids)} students from CSV."})
+  
 class MemoryGameSubmissionView(APIView):
     permission_classes = [IsAuthenticated]
     
