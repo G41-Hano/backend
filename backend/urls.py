@@ -5,9 +5,11 @@ from django.conf.urls.static import static
 from api.views import (
     CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
+    ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ClassroomStudentsView, JoinClassroomView, ProfileView
 )
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
+
 
 # API endpoints
 urlpatterns = [
@@ -29,6 +31,10 @@ urlpatterns = [
     path('api/classrooms/<int:pk>/', ClassroomDetailView.as_view(), name='classroom_detail'),
     path('api/classrooms/<int:pk>/students/', ClassroomStudentsView.as_view(), name='classroom_students'),
     path('api/classrooms/join/', JoinClassroomView.as_view(), name='join_classroom'),
+
+    # Drill URLs
+    path('api/drills/', DrillListCreateView.as_view(), name='drill_list_create'),
+    path('api/drills/<int:pk>/', DrillRetrieveUpdateDestroyView.as_view(), name='drill_detail'),
 ]
 
 # Serve media files in development

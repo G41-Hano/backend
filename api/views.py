@@ -1,19 +1,20 @@
 from django.shortcuts import render
-from .models import User, PasswordReset, Classroom
+from .models import User, PasswordReset, Classroom, Drill
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer
+from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from rest_framework import status
-import os
 import secrets
 from django.conf import settings
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django.core.files.storage import default_storage
 
 # Create your views here.
 
@@ -441,6 +442,150 @@ class JoinClassroomView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+class DrillListCreateView(generics.ListCreateAPIView):
+    serializer_class = DrillSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        user = self.request.user
+        classroom_id = self.request.query_params.get('classroom')
+        
+        if user.role.name == 'teacher':
+            qs = Drill.objects.filter(created_by=user)
+        else:
+            # Students can access drills from their classrooms
+            qs = Drill.objects.filter(classroom__students=user)
+            
+        if classroom_id:
+            qs = qs.filter(classroom_id=classroom_id)
+            
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        data = request.data
+        questions_input = data.get('questions_input') or data.get('questions')
+        if isinstance(questions_input, str):
+            import json
+            questions_input = json.loads(questions_input)
+        serializer_data = {
+            'title': data.get('title'),
+            'description': data.get('description'),
+            'deadline': data.get('deadline'),
+            'classroom': data.get('classroom'),
+            'status': data.get('status'),
+            'questions_input': questions_input,
+        }
+        serializer = self.get_serializer(data=serializer_data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+class DrillRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Drill.objects.all()
+    serializer_class = DrillSerializer
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get_queryset(self):
+        # Filter by user to ensure they can only access their own drills
+        user = self.request.user
+        if user.role.name == 'teacher':
+            return Drill.objects.filter(created_by=user)
+        else:
+            # Students can access drills from their classrooms
+            return Drill.objects.filter(classroom__students=user)
+
+    def perform_destroy(self, instance):
+        # Only allow the creator (teacher) to delete
+        user = self.request.user
+        if user.role.name != 'teacher' or instance.created_by != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Only the creator teacher can delete this drill.')
+        return super().perform_destroy(instance)
+
+    def update(self, request, *args, **kwargs):
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            
+            # Create a mutable copy of the data
+            data = {}
+            
+            # Handle MultiValueDict from request.data
+            if hasattr(request.data, 'dict'):
+                data = request.data.dict()
+            else:
+                # Copy each item from request.data
+                for key in request.data:
+                    data[key] = request.data[key]
+            
+            # Process questions data if present
+            questions_input = request.data.get('questions_input') or request.data.get('questions')
+            
+            if questions_input:
+                # Handle string JSON input
+                if isinstance(questions_input, str):
+                    try:
+                        import json
+                        data['questions_input'] = json.loads(questions_input)
+                    except json.JSONDecodeError as e:
+                        return Response(
+                            {"error": f"Invalid JSON in questions_input field: {str(e)}"}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                else:
+                    data['questions_input'] = questions_input
+            
+            # Create and validate serializer
+            serializer = self.get_serializer(
+                instance,
+                data=data,
+                context={'request': request},
+                partial=partial
+            )
+            
+            try:
+                serializer.is_valid(raise_exception=True)
+            except Exception as e:
+                return Response(
+                    {"error": f"Validation error: {str(e)}", "details": serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Perform the update
+            try:
+                self.perform_update(serializer)
+            except Exception as e:
+                import traceback
+                return Response(
+                    {
+                        "error": f"Error updating drill: {str(e)}",
+                        "traceback": traceback.format_exc()
+                    },
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            
+            if getattr(instance, '_prefetched_objects_cache', None):
+                # If 'prefetch_related' has been applied to a queryset, we need to
+                # forcibly invalidate the prefetch cache on the instance.
+                instance._prefetched_objects_cache = {}
+                
+            return Response(serializer.data)
+            
+        except Exception as e:
+            import traceback
+            return Response(
+                {
+                    "error": f"Unexpected error: {str(e)}",
+                    "traceback": traceback.format_exc()
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 # Profile View
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
