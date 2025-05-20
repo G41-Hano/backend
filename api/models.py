@@ -73,12 +73,8 @@ class Classroom(models.Model):
     teacher = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='classrooms')
     students = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='enrolled_classrooms', blank=True)
     class_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
-    color = models.CharField(max_length=7, default='#7D83D7')  # Default color
-    student_color = models.CharField(max_length=7, null=True, blank=True)  # Student's custom color
     is_hidden = models.BooleanField(default=False)  # Hidden state
     is_archived = models.BooleanField(default=False)  # Archived state
-    order = models.IntegerField(default=0)  # Order for sorting
-
     def __str__(self):
         return self.name
 
@@ -101,7 +97,7 @@ class Classroom(models.Model):
         return code
 
     class Meta:
-        ordering = ['order', '-created_at']  # Order by position first, then creation date
+        ordering = ['-created_at']  # Order by creation date
 
 
 class WordList(models.Model):

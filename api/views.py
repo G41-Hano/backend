@@ -142,9 +142,9 @@ class ClassroomListView(generics.ListCreateAPIView): # creates the classroom and
     def get_queryset(self):
         user = self.request.user
         if user.role.name == 'teacher':
-            return Classroom.objects.filter(teacher=user).order_by('order', '-created_at')
+            return Classroom.objects.filter(teacher=user).order_by('-created_at')
         else:
-            return Classroom.objects.filter(students=user).order_by('order', '-created_at')
+            return Classroom.objects.filter(students=user).order_by('-created_at')
 
     def create(self, request, *args, **kwargs):
         if request.user.role.name != 'teacher':
@@ -152,11 +152,6 @@ class ClassroomListView(generics.ListCreateAPIView): # creates the classroom and
                 {"error": "Only teachers can create classrooms"}, 
                 status=status.HTTP_403_FORBIDDEN
             )
-        
-        # Set the order to be the last in the list
-        last_classroom = Classroom.objects.filter(teacher=request.user).order_by('-order').first()
-        next_order = (last_classroom.order + 1) if last_classroom else 0
-        request.data['order'] = next_order
         
         return super().create(request, *args, **kwargs)
 
@@ -173,11 +168,11 @@ class ClassroomDetailView(generics.RetrieveUpdateDestroyAPIView): # updates and 
             return Classroom.objects.filter(students=user)
 
     def update(self, request, *args, **kwargs):
-        # Allow students to update only student_color, is_hidden, and order
+        # Allow students to update only is_hidden
         if request.user.role.name == 'student':
-            if set(request.data.keys()) - {'student_color', 'is_hidden', 'order'}:
+            if set(request.data.keys()) - {'is_hidden'}:
                 return Response(
-                    {"error": "Students can only update their color preference, visibility, and order"}, 
+                    {"error": "Students can only update visibility"}, 
                     status=status.HTTP_403_FORBIDDEN
                 )
             # Verify student is enrolled in this classroom
