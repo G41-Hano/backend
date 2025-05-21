@@ -129,10 +129,13 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     dropZones = serializers.JSONField(required=False)
     blankPosition = serializers.IntegerField(required=False, allow_null=True)
     memoryCards = serializers.JSONField(required=False)
+    story_title = serializers.CharField(required=False, allow_null=True)
+    story_context = serializers.CharField(required=False, allow_null=True)
+    sign_language_instructions = serializers.CharField(required=False, allow_null=True)
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards']
+        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards', 'story_title', 'story_context', 'sign_language_instructions']
 
     def validate(self, data):
         if data.get('type') == 'G':  # Memory Game type
