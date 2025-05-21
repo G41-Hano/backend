@@ -73,12 +73,8 @@ class Classroom(models.Model):
     teacher = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='classrooms')
     students = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='enrolled_classrooms', blank=True)
     class_code = models.CharField(max_length=10, unique=True, blank=True, null=True)
-    color = models.CharField(max_length=7, default='#7D83D7')  # Default color
-    student_color = models.CharField(max_length=7, null=True, blank=True)  # Student's custom color
     is_hidden = models.BooleanField(default=False)  # Hidden state
     is_archived = models.BooleanField(default=False)  # Archived state
-    order = models.IntegerField(default=0)  # Order for sorting
-
     def __str__(self):
         return self.name
 
@@ -101,7 +97,7 @@ class Classroom(models.Model):
         return code
 
     class Meta:
-        ordering = ['order', '-created_at']  # Order by position first, then creation date
+        ordering = ['-created_at']  # Order by creation date
 
 
 class WordList(models.Model):
@@ -178,3 +174,49 @@ class MemoryGameResult(models.Model):
     time_taken = models.FloatField()  # Time taken in seconds
     score = models.FloatField()  # Score based on attempts and time
   
+#Transfer Request
+class TransferRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected')
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='transfer_requests')
+    from_classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='outgoing_transfers')
+    to_classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='incoming_transfers')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='transfer_requests_made')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    reason = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Transfer request for {self.student.username} from {self.from_classroom.name} to {self.to_classroom.name}"
+
+    class Meta:
+        ordering = ['-created_at']
+
+#Notification
+
+class Notification(models.Model):
+    TYPE_CHOICES = [
+        ('student_transfer', 'Student Transfer Request'),
+        ('transfer_approved', 'Transfer Approved'),
+        ('transfer_rejected', 'Transfer Rejected')
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    message = models.TextField()
+    data = models.JSONField(default=dict)  # Additional data related to the notification
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Notification for {self.recipient.username}: {self.type}"
+
+    class Meta:
+        ordering = ['-created_at']

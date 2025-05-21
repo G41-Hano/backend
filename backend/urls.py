@@ -6,10 +6,10 @@ from api.views import (
     CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
-    ClassroomStudentsView, JoinClassroomView, ProfileView, import_students_from_csv
+    ClassroomStudentsView, JoinClassroomView, ProfileView, import_students_from_csv,
+    TransferRequestViewSet, NotificationViewSet
 )
 from rest_framework_simplejwt.views import TokenRefreshView
-
 
 # API endpoints
 urlpatterns = [
@@ -31,11 +31,24 @@ urlpatterns = [
     path('api/classrooms/<int:pk>/', ClassroomDetailView.as_view(), name='classroom_detail'),
     path('api/classrooms/<int:pk>/students/', ClassroomStudentsView.as_view(), name='classroom_students'),
     path('api/classrooms/join/', JoinClassroomView.as_view(), name='join_classroom'),
-    path('api/classrooms/<int:pk>/import-students/', import_students_from_csv, name='import_students_from_csv'), # import students from csv
+    path('api/classrooms/<int:pk>/import-students/', import_students_from_csv, name='import_students_from_csv'),
     
     # Drill URLs
     path('api/drills/', DrillListCreateView.as_view(), name='drill_list_create'),
     path('api/drills/<int:pk>/', DrillRetrieveUpdateDestroyView.as_view(), name='drill_detail'),
+    
+    # Transfer Request URLs
+    path('api/transfer-requests/', TransferRequestViewSet.as_view({'get': 'list', 'post': 'create'}), name='transfer_request_list'),
+    path('api/transfer-requests/<int:pk>/', TransferRequestViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='transfer_request_detail'),
+    path('api/transfer-requests/<int:pk>/approve/', TransferRequestViewSet.as_view({'post': 'approve'}), name='transfer_request_approve'),
+    path('api/transfer-requests/<int:pk>/reject/', TransferRequestViewSet.as_view({'post': 'reject'}), name='transfer_request_reject'),
+    path('api/transfer-requests/available-classrooms/', TransferRequestViewSet.as_view({'get': 'available_classrooms'}), name='transfer_request_available_classrooms'),
+    
+    # Notification URLs
+    path('api/notifications/', NotificationViewSet.as_view({'get': 'list'}), name='notification_list'),
+    path('api/notifications/<int:pk>/', NotificationViewSet.as_view({'get': 'retrieve'}), name='notification_detail'),
+    path('api/notifications/<int:pk>/mark-as-read/', NotificationViewSet.as_view({'post': 'mark_as_read'}), name='notification_mark_as_read'),
+    path('api/notifications/mark-all-as-read/', NotificationViewSet.as_view({'post': 'mark_all_as_read'}), name='notification_mark_all_as_read'),
 ]
 
 # Serve media files in development

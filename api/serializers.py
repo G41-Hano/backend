@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Role, Classroom, Drill, DrillQuestion, DrillChoice, MemoryGameResult
+from .models import User, Role, Classroom, Drill, DrillQuestion, DrillChoice, MemoryGameResult, TransferRequest, Notification
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .utils.encryption import encrypt, decrypt
 
@@ -74,7 +74,7 @@ class ClassroomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classroom
         fields = ['id', 'name', 'description', 'created_at', 'updated_at', 'teacher', 'teacher_name', 
-                 'student_count', 'class_code', 'color', 'student_color', 'is_hidden', 'is_archived', 'students', 'order']
+                 'student_count', 'class_code', 'is_hidden', 'is_archived', 'students']
         read_only_fields = ['created_at', 'updated_at', 'teacher', 'class_code']
 
     def validate_name(self, value):
@@ -451,3 +451,55 @@ class MemoryGameResultSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"Invalid match: {match}")
         
         return data
+    
+
+class TransferRequestSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    from_classroom_name = serializers.SerializerMethodField()
+    to_classroom_name = serializers.SerializerMethodField()
+    requested_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TransferRequest
+        fields = ['id', 'student', 'student_name', 'from_classroom', 'from_classroom_name',
+                 'to_classroom', 'to_classroom_name', 'requested_by', 'requested_by_name',
+                 'status', 'created_at', 'updated_at', 'reason']
+        read_only_fields = ['status', 'created_at', 'updated_at']
+
+    def get_student_name(self, obj):
+        return f"{obj.student.get_decrypted_first_name()} {obj.student.get_decrypted_last_name()}"
+
+    def get_from_classroom_name(self, obj):
+        return obj.from_classroom.name
+
+    def get_to_classroom_name(self, obj):
+        return obj.to_classroom.name
+
+    def get_requested_by_name(self, obj):
+        return f"{obj.requested_by.get_decrypted_first_name()} {obj.requested_by.get_decrypted_last_name()}"
+
+    def validate(self, data):
+        # Get the student and classrooms
+        student = data['student']
+        from_classroom = data['from_classroom']
+        to_classroom = data['to_classroom']
+
+        # Check if student is in the from_classroom
+        if not from_classroom.students.filter(id=student.id).exists():
+            raise serializers.ValidationError("Student is not enrolled in the source classroom")
+
+        # Check if student is already in the to_classroom
+        if to_classroom.students.filter(id=student.id).exists():
+            raise serializers.ValidationError("Student is already enrolled in the target classroom")
+
+        # Check if from_classroom and to_classroom are different
+        if from_classroom.id == to_classroom.id:
+            raise serializers.ValidationError("Source and target classrooms must be different")
+
+        return data
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'type', 'message', 'data', 'is_read', 'created_at']
+        read_only_fields = ['created_at']
