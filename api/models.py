@@ -147,6 +147,11 @@ class DrillQuestion(models.Model):
   blankPosition = models.IntegerField(blank=True, null=True)
   memoryCards = models.JSONField(default=list, blank=True, null=True)  # New field for memory game cards
 
+  #fields for learning content drill
+  story_title = models.CharField(max_length=100, blank=True, null=True)
+  story_context = models.TextField(blank=True, null=True)
+  sign_language_instructions = models.TextField(blank=True, null=True)
+
 class DrillChoice(models.Model):
   id = models.AutoField(primary_key=True)
   question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='choices')
