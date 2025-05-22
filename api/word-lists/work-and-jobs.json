@@ -1,0 +1,211 @@
+{
+  "id": "work-and-jobs",
+  "name": "Work and Jobs",
+  "description": "TBA",
+  "words": [
+    {
+      "word": "actor",
+      "definition": "a person who acts and gets things done",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "journalist",
+      "definition": "a writer for newspapers and magazines",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "secretary",
+      "definition": "an assistant who handles correspondence and clerical work for a boss or an organization",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "artist",
+      "definition": "a person whose creative work shows sensitivity and imagination",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "doctor",
+      "definition": "a licensed medical practitioner",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "king",
+      "definition": "a male sovereign; ruler of a kingdom",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "driver",
+      "definition": "the operator of a motor vehicle",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "manager",
+      "definition": "someone who controls resources and expenditures",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "singer",
+      "definition": "a person who sings",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "mechanic",
+      "definition": "a craftsman skilled in operating machine tools",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "businessman",
+      "definition": "a person engaged in commercial or industrial business",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "student",
+      "definition": "a learner who is enrolled in an educational institution",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "engineer",
+      "definition": "a person who uses scientific knowledge to solve practical problems",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "teacher",
+      "definition": "a person whose occupation is teaching",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "chemist",
+      "definition": "a scientist who specializes in chemistry",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "explorer",
+      "definition": "someone who travels into little-known regions",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "musician",
+      "definition": "someone who plays a musical instrument",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "cleaner",
+      "definition": "someone whose job involves tidying and removing dirt or filth",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "nurse",
+      "definition": "one skilled in caring for young children or the sick",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "tour guide",
+      "definition": "a guide who leads others on a tour",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "coach",
+      "definition": "someone in charge of training an athlete or a team",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "occupation",
+      "definition": "the principal activity in your life that you do to earn money",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "farmer",
+      "definition": "a person who operates a farm",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "waiter/ waitress",
+      "definition": "a person whose occupation is to serve at table in a restaurant",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "painter",
+      "definition": "an artist who paints",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "cook",
+      "definition": "someone who cooks food",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "photographer",
+      "definition": "someone who takes photographs professionally",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "customer",
+      "definition": "someone who pays for goods or services",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "pilot",
+      "definition": "someone who is licensed to operate an aircraft in flight",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "writer",
+      "definition": "a person who is able to write and has written something",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "dentist",
+      "definition": "a doctor who specializes in teeth, gums, and the mouth",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "police officer",
+      "definition": "a person whose job involves enforcing the law",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "queen",
+      "definition": "a female sovereign ruler",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "receptionist",
+      "definition": "a secretary whose main duty is to answer the telephone and receive visitors",
+      "image_url": null,
+      "video_url": null
+    }
+  ]
+}

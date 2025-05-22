@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Role, Classroom, Drill, DrillQuestion, DrillChoice, MemoryGameResult, TransferRequest, Notification
+from .models import *
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .utils.encryption import encrypt, decrypt
 
@@ -503,3 +503,25 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'type', 'message', 'data', 'is_read', 'created_at']
         read_only_fields = ['created_at']
+
+
+class VocabularySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vocabulary
+        fields = ['word', 'definition', 'image_url', 'video_url']
+
+class WordListSerializer(serializers.ModelSerializer):
+    words = VocabularySerializer(many=True)
+
+    class Meta:
+        model = WordList
+        fields = ['id', 'name', 'description', 'words']
+
+    def create(self, validated_data):
+        created_by = self.context.get('request').user
+
+        words_data = validated_data.pop('words')
+        wordlist = WordList.objects.create(created_by=created_by, **validated_data)
+        for word_data in words_data:
+            Vocabulary.objects.create(list=wordlist, **word_data)
+        return wordlist
