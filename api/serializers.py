@@ -464,7 +464,7 @@ class TransferRequestSerializer(serializers.ModelSerializer):
         fields = ['id', 'student', 'student_name', 'from_classroom', 'from_classroom_name',
                  'to_classroom', 'to_classroom_name', 'requested_by', 'requested_by_name',
                  'status', 'created_at', 'updated_at', 'reason']
-        read_only_fields = ['status', 'created_at', 'updated_at']
+        read_only_fields = ['status', 'created_at', 'updated_at', 'requested_by']
 
     def get_student_name(self, obj):
         return f"{obj.student.get_decrypted_first_name()} {obj.student.get_decrypted_last_name()}"
@@ -496,10 +496,19 @@ class TransferRequestSerializer(serializers.ModelSerializer):
         if from_classroom.id == to_classroom.id:
             raise serializers.ValidationError("Source and target classrooms must be different")
 
+        # Check for existing pending transfer request
+        if TransferRequest.objects.filter(
+            student=student,
+            from_classroom=from_classroom,
+            to_classroom=to_classroom,
+            status='pending'
+        ).exists():
+            raise serializers.ValidationError("A pending transfer request already exists for this student and classrooms")
+
         return data
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'type', 'message', 'data', 'is_read', 'created_at']
-        read_only_fields = ['created_at']
+        read_only_fields = ['created_at', 'type', 'message', 'data']

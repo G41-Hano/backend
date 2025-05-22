@@ -46,7 +46,7 @@ urlpatterns = [
     
     # Notification URLs
     path('api/notifications/', NotificationViewSet.as_view({'get': 'list'}), name='notification_list'),
-    path('api/notifications/<int:pk>/', NotificationViewSet.as_view({'get': 'retrieve'}), name='notification_detail'),
+    path('api/notifications/<int:pk>/', NotificationViewSet.as_view({'get': 'retrieve', 'delete': 'destroy'}), name='notification_detail'),
     path('api/notifications/<int:pk>/mark-as-read/', NotificationViewSet.as_view({'post': 'mark_as_read'}), name='notification_mark_as_read'),
     path('api/notifications/mark-all-as-read/', NotificationViewSet.as_view({'post': 'mark_all_as_read'}), name='notification_mark_all_as_read'),
 ]
