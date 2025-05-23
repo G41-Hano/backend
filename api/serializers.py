@@ -130,13 +130,15 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     dropZones = serializers.JSONField(required=False)
     blankPosition = serializers.IntegerField(required=False, allow_null=True)
     memoryCards = serializers.JSONField(required=False)
+    pictureWord = serializers.JSONField(required=False)
     story_title = serializers.CharField(required=False, allow_null=True)
     story_context = serializers.CharField(required=False, allow_null=True)
     sign_language_instructions = serializers.CharField(required=False, allow_null=True)
+    answer = serializers.CharField(required=False, allow_null=True)
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards', 'story_title', 'story_context', 'sign_language_instructions']
+        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
 
     def validate(self, data):
         if data.get('type') == 'G':  # Memory Game type
@@ -155,6 +157,20 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Each card must be an object")
                 if 'id' not in card or 'content' not in card or 'pairId' not in card:
                     raise serializers.ValidationError("Each card must have id, content, and pairId fields")
+        elif data.get('type') == 'P':  # Picture Word type
+            if not data.get('pictureWord'):
+                raise serializers.ValidationError("Pictures are required for Picture Word questions")
+            pictures = data['pictureWord']
+            if not isinstance(pictures, list):
+                raise serializers.ValidationError("Pictures must be a list")
+            if len(pictures) != 4:
+                raise serializers.ValidationError("Exactly 4 pictures are required for Picture Word questions")
+            # Validate each picture has required fields
+            for pic in pictures:
+                if not isinstance(pic, dict):
+                    raise serializers.ValidationError("Each picture must be an object")
+                if 'id' not in pic:
+                    raise serializers.ValidationError("Each picture must have an id field")
         return data
 
 class DrillSerializer(serializers.ModelSerializer):
@@ -178,7 +194,6 @@ class DrillSerializer(serializers.ModelSerializer):
         drill = Drill.objects.create(**validated_data)
         for q_idx, question_data in enumerate(questions_data):
             choices_data = question_data.pop('choices', [])
-            question_data.pop('answer', None)
             question = DrillQuestion.objects.create(drill=drill, **question_data)
             
             # Handle choices for multiple choice and fill in the blank
@@ -212,6 +227,18 @@ class DrillSerializer(serializers.ModelSerializer):
                         elif file.content_type.startswith('video/'):
                             card_data['media'] = {'url': f'/media/drill_choices/videos/{file.name}', 'type': file.content_type}
                 question.memoryCards = memory_cards
+                question.save()
+
+            # Handle picture word images
+            if question_data.get('type') == 'P':
+                pictures = question_data.get('pictureWord', [])
+                for p_idx, pic_data in enumerate(pictures):
+                    media_key = pic_data.get('media')
+                    if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
+                        file = request.FILES[media_key]
+                        if file.content_type.startswith('image/'):
+                            pic_data['media'] = {'url': f'/media/drill_choices/images/{file.name}', 'type': file.content_type}
+                question.pictureWord = pictures
                 question.save()
         return drill
 
