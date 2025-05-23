@@ -139,6 +139,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
         model = DrillQuestion
         fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
 
+    #validate
     def validate(self, data):
         if data.get('type') == 'G':  # Memory Game type
             if not data.get('memoryCards'):
