@@ -9,7 +9,7 @@ WORDLISTS_DIR = os.path.join(settings.BASE_DIR, 'api', 'word-lists')
 
 # for fetching all summaries of word lists (id, name, and description)
 class BuiltInWordListIndexView(APIView):
-  permission_classes = [AllowAny]
+  permission_classes = [IsAuthenticated]
 
   def get(self, request):
     wordlists_summary = []
@@ -36,7 +36,7 @@ class BuiltInWordListIndexView(APIView):
 
 # for fetching 1 word list AND its words
 class BuiltInWordListView(APIView):
-  permission_classes = [AllowAny]
+  permission_classes = [IsAuthenticated]
 
   def get(self, request, list_id):
     file_path = os.path.join(WORDLISTS_DIR, f'{list_id}.json')

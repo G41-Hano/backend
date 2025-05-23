@@ -1,7 +1,7 @@
 from ..models import Vocabulary, WordList
 from ..serializers import VocabularySerializer, WordListSerializer
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 
 # input/output to the view should be in this form:
@@ -25,6 +25,9 @@ from rest_framework.permissions import IsAuthenticated
 # }
 
 class WordListView(viewsets.ModelViewSet):
-  queryset = WordList.objects.all()
   serializer_class = WordListSerializer
   permission_classes = [IsAuthenticated]
+
+  def get_queryset(self):
+    user = self.request.user
+    return WordList.objects.filter(created_by=user)
