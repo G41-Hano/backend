@@ -232,13 +232,58 @@ class DrillSerializer(serializers.ModelSerializer):
             # Handle picture word images
             if question_data.get('type') == 'P':
                 pictures = question_data.get('pictureWord', [])
+                updated_pictures = [] # Create a new list to store updated picture data
                 for p_idx, pic_data in enumerate(pictures):
-                    media_key = pic_data.get('media')
-                    if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
-                        file = request.FILES[media_key]
+                    media_value = pic_data.get('media')
+                    processed_media = None
+
+                    if media_value and isinstance(media_value, str) and request and media_value in request.FILES:
+                        # This is a new file upload referenced by a key from frontend
+                        file = request.FILES[media_value]
+                        # Ensure it's an image before saving
                         if file.content_type.startswith('image/'):
-                            pic_data['media'] = {'url': f'/media/drill_choices/images/{file.name}', 'type': file.content_type}
-                question.pictureWord = pictures
+                            try:
+                                from django.core.files.storage import default_storage
+                                # Define the target path within your media storage
+                                file_path = f'drill_choices/images/{file.name}'
+
+                                # Save the file using the default storage
+                                saved_path = default_storage.save(file_path, file)
+
+                                # Create the media data object with the saved file's URL
+                                processed_media = {
+                                    'url': request.build_absolute_uri(default_storage.url(saved_path)),
+                                    'type': file.content_type
+                                }
+                                print(f"Backend: Saved new picture word image to: {saved_path}") # Debugging
+
+                            except Exception as e:
+                                print(f"Backend: Error saving picture word file {file.name}: {e}") # Debugging
+                                # If saving fails, do not add this media
+                                processed_media = None # Explicitly set to None
+                        else:
+                             # Handle non-image files if necessary, or skip
+                             print(f"Backend: Skipping non-image file for picture word: {file.name}") # Debugging
+                             processed_media = None
+
+                    elif media_value and isinstance(media_value, dict) and 'url' in media_value:
+                        # This is existing media data with a URL, keep it as is
+                        processed_media = media_value
+                        print(f"Backend: Keeping existing picture word image URL: {media_value['url']}") # Debugging
+
+                    # Add the picture data with the processed media (or original if no media was provided or processed)
+                    updated_pic_data = {**pic_data}
+                    if processed_media is not None:
+                        updated_pic_data['media'] = processed_media
+                    elif 'media' in updated_pic_data and processed_media is None and isinstance(media_value, str) and media_value in request.FILES:
+                         # If a file was attempted but failed to save (processed_media is None), remove the media key from the data being saved
+                         del updated_pic_data['media']
+                    # If media_value was not provided at all, the original pic_data without media is fine
+
+                    updated_pictures.append(updated_pic_data)
+
+                # Assign the list of updated picture data back to the question
+                question.pictureWord = updated_pictures
                 question.save()
         return drill
 
