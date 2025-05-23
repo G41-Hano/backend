@@ -1,7 +1,8 @@
 from rest_framework import serializers
-from .models import User, Role, Classroom, Drill, DrillQuestion, DrillChoice, MemoryGameResult, TransferRequest, Notification
+from .models import *
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .utils.encryption import encrypt, decrypt
+from collections import Counter
 
 # Serializers that convert the Django Object to JSON, and vice versa
 
@@ -129,13 +130,15 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     dropZones = serializers.JSONField(required=False)
     blankPosition = serializers.IntegerField(required=False, allow_null=True)
     memoryCards = serializers.JSONField(required=False)
+    pictureWord = serializers.JSONField(required=False)
     story_title = serializers.CharField(required=False, allow_null=True)
     story_context = serializers.CharField(required=False, allow_null=True)
     sign_language_instructions = serializers.CharField(required=False, allow_null=True)
+    answer = serializers.CharField(required=False, allow_null=True)
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards', 'story_title', 'story_context', 'sign_language_instructions']
+        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
 
     def validate(self, data):
         if data.get('type') == 'G':  # Memory Game type
@@ -154,6 +157,20 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Each card must be an object")
                 if 'id' not in card or 'content' not in card or 'pairId' not in card:
                     raise serializers.ValidationError("Each card must have id, content, and pairId fields")
+        elif data.get('type') == 'P':  # Picture Word type
+            if not data.get('pictureWord'):
+                raise serializers.ValidationError("Pictures are required for Picture Word questions")
+            pictures = data['pictureWord']
+            if not isinstance(pictures, list):
+                raise serializers.ValidationError("Pictures must be a list")
+            if len(pictures) != 4:
+                raise serializers.ValidationError("Exactly 4 pictures are required for Picture Word questions")
+            # Validate each picture has required fields
+            for pic in pictures:
+                if not isinstance(pic, dict):
+                    raise serializers.ValidationError("Each picture must be an object")
+                if 'id' not in pic:
+                    raise serializers.ValidationError("Each picture must have an id field")
         return data
 
 class DrillSerializer(serializers.ModelSerializer):
@@ -177,7 +194,6 @@ class DrillSerializer(serializers.ModelSerializer):
         drill = Drill.objects.create(**validated_data)
         for q_idx, question_data in enumerate(questions_data):
             choices_data = question_data.pop('choices', [])
-            question_data.pop('answer', None)
             question = DrillQuestion.objects.create(drill=drill, **question_data)
             
             # Handle choices for multiple choice and fill in the blank
@@ -211,6 +227,18 @@ class DrillSerializer(serializers.ModelSerializer):
                         elif file.content_type.startswith('video/'):
                             card_data['media'] = {'url': f'/media/drill_choices/videos/{file.name}', 'type': file.content_type}
                 question.memoryCards = memory_cards
+                question.save()
+
+            # Handle picture word images
+            if question_data.get('type') == 'P':
+                pictures = question_data.get('pictureWord', [])
+                for p_idx, pic_data in enumerate(pictures):
+                    media_key = pic_data.get('media')
+                    if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
+                        file = request.FILES[media_key]
+                        if file.content_type.startswith('image/'):
+                            pic_data['media'] = {'url': f'/media/drill_choices/images/{file.name}', 'type': file.content_type}
+                question.pictureWord = pictures
                 question.save()
         return drill
 
@@ -512,3 +540,109 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ['id', 'type', 'message', 'data', 'is_read', 'created_at']
         read_only_fields = ['created_at', 'type', 'message', 'data']
+
+class VocabularySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vocabulary
+        fields = ['id', 'word', 'definition', 'image_url', 'video_url']
+        extra_kwargs = {
+            'id': {'read_only': False, 'required': False} # <--- THIS IS KEY
+        }
+
+class WordListSerializer(serializers.ModelSerializer):
+    words = VocabularySerializer(many=True)
+
+    class Meta:
+        model = WordList
+        fields = ['id', 'name', 'description', 'words', 'created_by']
+
+    def validate(self, data):
+        word_texts = [word['word'].strip().lower() for word in data.get('words', [])]
+        duplicates = [word for word, count in Counter(word_texts).items() if count > 1]
+        if duplicates:
+            raise serializers.ValidationError({
+                'words': f'Duplicate words found (case-insensitive): {", ".join(duplicates)}'
+            })
+        return data
+    
+    def create(self, validated_data):
+        created_by = self.context.get('request').user
+
+        words_data = validated_data.pop('words')
+        wordlist = WordList.objects.create(created_by=created_by, **validated_data)
+        for word_data in words_data:
+            Vocabulary.objects.create(list=wordlist, **word_data)
+        return wordlist
+    
+    def update(self, instance, validated_data):
+        # Update WordList fields
+        instance.name = validated_data.get('name', instance.name)
+        instance.description = validated_data.get('description', instance.description)
+        instance.save()
+
+        # Handle nested 'words'
+        words_data = validated_data.get('words')
+        if words_data is not None:  # Only update words if 'words' is provided in the payload
+            existing_words = instance.words.all()
+            existing_words_map = {word.id: word for word in existing_words} # Map existing words by their ID
+            existing_word_texts_lower = {word.word.strip().lower() for word in existing_words}
+
+            words_to_create = []
+            words_to_update = []
+            incoming_word_ids = set()
+
+            # Keep track of words planned for creation to avoid duplicates within the new batch
+            new_word_texts_lower_in_payload = set()
+
+            for word_data in words_data:
+                word_id = word_data.get('id') # <--- We explicitly look for 'id' here
+                word_text_lower = word_data['word'].strip().lower() # Assuming 'word' is always present
+
+                if word_id:
+                    incoming_word_ids.add(word_id)
+                    if word_id in existing_words_map: # <--- If 'id' is found in existing map, it's an update
+                        words_to_update.append(word_data)
+                    else:
+                        raise serializers.ValidationError({
+                            'words': f"Vocabulary item with ID '{word_id}' not found in this word list. "
+                                     "Please provide an existing ID for updates or omit the ID for new creations."
+                        })
+                else:
+                    # This is a new word to be created
+                    # Check for duplicates against existing words in the list
+                    if word_text_lower in existing_word_texts_lower:
+                        raise serializers.ValidationError({
+                            'words': f"Cannot add '{word_data['word']}' (case-insensitive) as it already exists in this word list."
+                        })
+                    
+                    # Check for duplicates against other new words in the same payload
+                    if word_text_lower in new_word_texts_lower_in_payload:
+                        # This should theoretically be caught by the main validate method,
+                        # but it's good to have a safeguard here too.
+                        raise serializers.ValidationError({
+                            'words': f"Duplicate new word '{word_data['word']}' (case-insensitive) found in the payload."
+                        })
+
+                    new_word_texts_lower_in_payload.add(word_text_lower)
+                    words_to_create.append(word_data)
+
+            # Create new words
+            for word_data in words_to_create:
+                Vocabulary.objects.create(list=instance, **word_data)
+
+            # Update existing words
+            for word_data in words_to_update:
+                word_id = word_data['id']
+                word_instance = existing_words_map[word_id] # Retrieve the existing instance
+                for attr, value in word_data.items():
+                    setattr(word_instance, attr, value) # Update its attributes
+                word_instance.save() # Save the changes
+
+            # Delete words not present in the payload (that were associated with the wordlist)
+            words_to_delete = [
+                word for word in existing_words if word.id not in incoming_word_ids
+            ]
+            for word in words_to_delete:
+                word.delete()
+
+        return instance

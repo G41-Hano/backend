@@ -1,0 +1,211 @@
+{
+  "id": "clothes-and-accessories",
+  "name": "Clothes and Accessories",
+  "description": "TBA",
+  "words": [
+    {
+      "word": "backpack",
+      "definition": "a bag you wear on your back, with straps over your shoulders",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "purse",
+      "definition": "a container used for carrying money and small personal items or accessories (especially by women)",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "swimsuit",
+      "definition": "tight fitting garment worn for swimming",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "raincoat",
+      "definition": "a coat that protects you from getting drenched in the rain",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "tie",
+      "definition": "a thin piece of cloth that's knotted around the neck",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "belt",
+      "definition": "an accessory you wear around your waist that helps hold your pants up",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "glasses",
+      "definition": "what you wear to help you see better if you have less than perfect eyesight",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "ring",
+      "definition": "jewelry consisting of precious metal (often set with jewels) worn on the finger",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "blouse",
+      "definition": "a shirt or top usually worn by a woman",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "glove",
+      "definition": "a piece of clothing that you wear on your hand, to protect it or keep it warm.",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "scarf",
+      "definition": "a wide piece of fabric that's worn around the neck or over the head",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "boot",
+      "definition": "kind of shoe that can be as high as your knee",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "trousers",
+      "definition": "two-legged piece of clothing you wear on the bottom half of your body",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "bracelet",
+      "definition": "jewelry worn around the wrist for decoration",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "hat",
+      "definition": "headdress that protects the head from bad weather; has shaped crown and usually a brim",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "shoes",
+      "definition": "footwear shaped to fit the foot (below the ankle)",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "jacket",
+      "definition": "a lightweight or shorter version of a coat",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "shorts",
+      "definition": "trousers that end at or above the knee",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "T-shirt",
+      "definition": "a casual, collarless shirt",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "jeans",
+      "definition": "close-fitting trousers of heavy denim for manual work or casual wear",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "skirt",
+      "definition": "a garment hanging from the waist; worn mainly by girls and women",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "umbrella",
+      "definition": "gizmo used to protect yourself from rain or sun",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "clothes",
+      "definition": "clothing in general, made of cloth or fabric",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "jewelry",
+      "definition": "an accessory (as a bracelet or ring or necklace) made of precious metals and set with gems",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "sock",
+      "definition": "a piece of clothing you wear on your foot, under your shoe, and usually come in pairs",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "coat",
+      "definition": "a warm piece of clothing you wear when it's cold outside",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "jumper",
+      "definition": "a sleeveless dress resembling an apron; worn over other clothing",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "suit",
+      "definition": "jacket and pants that match, well-suited for formal events",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "wallet",
+      "definition": "a pocket-size case for holding papers and paper money",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "sunglasses",
+      "definition": "glasses that are darkened to protect the eyes from the glare of the sun",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "watch",
+      "definition": "a small portable device for keeping time",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "dress",
+      "definition": "one-piece shirt and skirt combo that can be fancy or plain",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "sweater",
+      "definition": "crocheted or knitted garment covering the upper part of the body",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "earring",
+      "definition": "jewelry you wear on your ear",
+      "image_url": null,
+      "video_url": null
+    }
+  ]
+}

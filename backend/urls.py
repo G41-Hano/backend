@@ -6,9 +6,11 @@ from api.views import (
     CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
-    ClassroomStudentsView, JoinClassroomView, ProfileView, import_students_from_csv,
+    ProfileView, import_students_from_csv,
     TransferRequestViewSet, NotificationViewSet
 )
+from api.viewsets.word_list import WordListView
+from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 # API endpoints
@@ -49,6 +51,14 @@ urlpatterns = [
     path('api/notifications/<int:pk>/', NotificationViewSet.as_view({'get': 'retrieve', 'delete': 'destroy'}), name='notification_detail'),
     path('api/notifications/<int:pk>/mark-as-read/', NotificationViewSet.as_view({'post': 'mark_as_read'}), name='notification_mark_as_read'),
     path('api/notifications/mark-all-as-read/', NotificationViewSet.as_view({'post': 'mark_all_as_read'}), name='notification_mark_all_as_read'),
+
+    # Built-in Word List URLs
+    path('api/builtin-wordlist/', BuiltInWordListIndexView.as_view(), name='builtin-wordlist-index'),
+    path('api/builtin-wordlist/<str:list_id>/', BuiltInWordListView.as_view(), name='builtin-wordlist'),
+
+    # Custom Word List URLs
+    path('api/wordlist/', WordListView.as_view({'get':'list', 'post':'create'}), name='wordlist_list'),
+    path('api/wordlist/<int:pk>/', WordListView.as_view({'get':'retrieve', 'put':'update', 'delete':'destroy'}), name='wordlist_detail')
 ]
 
 # Serve media files in development
