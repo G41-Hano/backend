@@ -104,10 +104,13 @@ class WordList(models.Model):
   id = models.AutoField(primary_key=True)
   name = models.CharField(max_length=20)
   description = models.CharField(max_length=200)
+  created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='created_word_lists', blank=True, null=True)
 
 class Vocabulary(models.Model):
   word = models.CharField(max_length=20)
   definition = models.CharField(max_length=200)
+  image_url = models.URLField(max_length=500, null=True) # null=True for now since there is no image/video storage yet
+  video_url = models.URLField(max_length=500, null=True) # null=True for now since there is no image/video storage yet
   # FILE FIELD for IMAGE or VIDEO
   list = models.ForeignKey(WordList, on_delete=models.CASCADE, related_name="words")
    

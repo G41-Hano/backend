@@ -1,0 +1,193 @@
+{
+  "id": "the-natural-world",
+  "name": "The Natural World",
+  "description": "TBA",
+  "words": [
+    {
+      "word": "air",
+      "definition": "a mixture of gases (especially oxygen) required for breathing",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "fire",
+      "definition": "the process of combustion of inflammable materials producing heat and light and (often) smoke",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "moon",
+      "definition": "the natural satellite of the Earth",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "spring",
+      "definition": "the season of growth",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "autumn",
+      "definition": "the season when the leaves fall from the trees",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "flower",
+      "definition": "reproductive organ of angiosperm plants especially one having showy or colorful parts",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "mountain",
+      "definition": "a land mass that projects well above its surroundings",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "star",
+      "definition": "any celestial body visible from the Earth at night",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "beach",
+      "definition": "an area of sand sloping down to the water of a sea or lake",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "forest",
+      "definition": "the trees and other plants in a large densely wooded area",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "north",
+      "definition": "the cardinal compass point that is at 0 or 360 degrees",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "summer",
+      "definition": "the warmest season of the year",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "grass",
+      "definition": "narrow-leaved green herbage: grown as lawns",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "plant",
+      "definition": "a living organism lacking the power of locomotion",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "tree",
+      "definition": "a tall perennial woody plant having a main trunk and branches forming a distinct elevated crown",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "country",
+      "definition": "the territory occupied by a nation",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "water",
+      "definition": "a liquid necessary for the life of most animals and plants",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "hill",
+      "definition": "a local and well-defined elevation of the land",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "river",
+      "definition": "a large natural stream of water",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "west",
+      "definition": "the cardinal compass point that is a 270 degrees",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "desert",
+      "definition": "arid land with little or no vegetation",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "sea",
+      "definition": "a division of an ocean or a large body of salt water partially enclosed by land",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "winter",
+      "definition": "the coldest season of the year",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "east",
+      "definition": "the cardinal compass point that is at 90 degrees",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "ice",
+      "definition": "water frozen in the solid state",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "sky",
+      "definition": "the atmosphere and outer space as viewed from the earth",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "wood",
+      "definition": "the hard fibrous lignified substance under the bark of trees",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "island",
+      "definition": "a land mass that is surrounded by water",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "south",
+      "definition": "the cardinal compass point that is at 180 degrees",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "lake",
+      "definition": "a body of fresh water surrounded by land",
+      "image_url": null,
+      "video_url": null
+    },
+    {
+      "word": "space",
+      "definition": "any location outside the Earth's atmosphere",
+      "image_url": null,
+      "video_url": null
+    }
+  ]
+}
