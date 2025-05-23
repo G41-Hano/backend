@@ -134,8 +134,7 @@ class DrillQuestion(models.Model):
     ("M","Multiple Choice"),
     ("D","Drag and Drop"),
     ("F","Fill in the Blank"),
-    ("G","Memory Game"),
-    ("P","Picture Word"),  # New type for Four Pics One Word
+    ("G","Memory Game"),  
   ]
 
   id = models.AutoField(primary_key=True)
@@ -145,9 +144,7 @@ class DrillQuestion(models.Model):
   dragItems = models.JSONField(default=list, blank=True, null=True)
   dropZones = models.JSONField(default=list, blank=True, null=True)
   blankPosition = models.IntegerField(blank=True, null=True)
-  memoryCards = models.JSONField(default=list, blank=True, null=True)
-  pictureWord = models.JSONField(default=list, blank=True, null=True)  # New field for picture word questions
-  answer = models.TextField(max_length=200, blank=True, null=True)  # Add answer field
+  memoryCards = models.JSONField(default=list, blank=True, null=True)  # New field for memory game cards
 
   #fields for learning content drill
   story_title = models.CharField(max_length=100, blank=True, null=True)
