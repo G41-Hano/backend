@@ -243,12 +243,6 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
         {
             "student_ids": [1, 2, 3]  // List of student user IDs to enroll
         }
-        
-        Rules:
-        - Only teachers can add students
-        - Maximum 50 students per classroom
-        - Cannot add already enrolled students
-        - Can only add users with student role
         """
         # Check if user is a teacher
         if request.user.role.name != 'teacher':
@@ -303,6 +297,21 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                 )
 
             classroom.students.add(*students)
+
+            # Create notifications for each added student
+            for student in students:
+                Notification.objects.create(
+                    recipient=student,
+                    type='student_added',
+                    message=f"You have been added to the classroom {classroom.name} by {request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}",
+                    data={
+                        'classroom_id': classroom.id,
+                        'classroom_name': classroom.name,
+                        'teacher_id': request.user.id,
+                        'teacher_name': f"{request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}"
+                    }
+                )
+
             return Response(
                 {
                     'success': 'Students added successfully',
@@ -325,10 +334,6 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
         {
             "student_ids": [1, 2, 3]  // List of student user IDs to remove
         }
-        
-        Rules:
-        - Only teachers can remove students
-        - Can only remove enrolled students
         """
         # Check if user is a teacher
         if request.user.role.name != 'teacher':
@@ -358,6 +363,20 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                         "not_enrolled_ids": list(not_enrolled)
                     }, 
                     status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create notifications for each removed student
+            for student in enrolled_students:
+                Notification.objects.create(
+                    recipient=student,
+                    type='student_removed',
+                    message=f"You have been removed from the classroom {classroom.name} by {request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}",
+                    data={
+                        'classroom_id': classroom.id,
+                        'classroom_name': classroom.name,
+                        'teacher_id': request.user.id,
+                        'teacher_name': f"{request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}"
+                    }
                 )
 
             classroom.students.remove(*enrolled_students)
