@@ -160,7 +160,7 @@ class DrillChoice(models.Model):
   text = models.CharField(max_length=200, blank=True)
   image = models.ImageField(upload_to='drill_choices/images/', null=True, blank=True)
   video = models.FileField(upload_to='drill_choices/videos/', null=True, blank=True)
-  is_correct = models.BooleanField(default=False)
+  is_correct = models.BooleanField(default=False) # marks which of the DrillChoice objects is the correct answer option used for Multiple Choice ('M') and Fill in the Blank ('F') questions
 
 class DrillResult(models.Model):
   id = models.AutoField(primary_key=True)
@@ -179,7 +179,20 @@ class MemoryGameResult(models.Model):
     matches = models.JSONField(default=list)  # Store matched pairs
     time_taken = models.FloatField()  # Time taken in seconds
     score = models.FloatField()  # Score based on attempts and time
-  
+
+class QuestionResult(models.Model):
+    id = models.AutoField(primary_key=True)
+    drill_result = models.ForeignKey(DrillResult, on_delete=models.CASCADE, related_name='question_results')
+    question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='question_results')
+    submitted_answer = models.JSONField(null=True, blank=True) # Store the student's submitted answer (flexible format)
+    is_correct = models.BooleanField(default=False) # stores a student's result for a specific question within a drill run
+    time_taken = models.FloatField(null=True, blank=True) # Time taken to answer this specific question (optional)
+    submitted_at = models.DateTimeField(auto_now_add=True) # Timestamp of when this question was answered
+    points_awarded = models.FloatField(default=0) # Points awarded for this specific question
+
+    class Meta:
+        unique_together = ('drill_result', 'question'); # Ensure a student only has one result per question per drill run
+
 #Transfer Request
 class TransferRequest(models.Model):
     STATUS_CHOICES = [

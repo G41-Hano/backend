@@ -1,12 +1,12 @@
 from django.shortcuts import render
-from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification
+from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from rest_framework import generics, viewsets, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer, TransferRequestSerializer, NotificationSerializer
+from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer, TransferRequestSerializer, NotificationSerializer, DrillResultSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -747,86 +747,6 @@ def import_students_from_csv(request, pk):
     print("Enrolled students:", classroom.students.all())
 
     return Response({"success": f"Enrolled {len(enrolled_user_ids)} students from CSV."})
-  
-class MemoryGameSubmissionView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request, drill_id, question_id):
-        try:
-            # Get the drill and question
-            drill = Drill.objects.get(id=drill_id)
-            question = DrillQuestion.objects.get(id=question_id, drill=drill)
-            
-            if question.type != 'G':
-                return Response(
-                    {"error": "Question is not a memory game type"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Get or create drill result
-            drill_result, created = DrillResult.objects.get_or_create(
-                student=request.user,
-                drill=drill,
-                defaults={
-                    'run_number': 1,
-                    'completion_time': timezone.now(),
-                    'points': 0
-                }
-            )
-            
-            if not created:
-                drill_result.run_number += 1
-                drill_result.completion_time = timezone.now()
-                drill_result.save()
-            
-            # Calculate score based on attempts and time
-            attempts = request.data.get('attempts', 0)
-            time_taken = request.data.get('time_taken', 0)
-            matches = request.data.get('matches', [])
-            
-            # Score calculation
-            base_score = 100
-            attempt_penalty = attempts * 5  # 5 points penalty per attempt
-            time_penalty = time_taken * 0.1  # 0.1 points penalty per second
-            score = max(0, base_score - attempt_penalty - time_penalty)
-            
-            # Create memory game result
-            memory_result = MemoryGameResult.objects.create(
-                drill_result=drill_result,
-                question=question,
-                attempts=attempts,
-                matches=matches,
-                time_taken=time_taken,
-                score=score
-            )
-            
-            # Update drill result points
-            drill_result.points = score
-            drill_result.save()
-            
-            return Response({
-                'success': True,
-                'score': score,
-                'attempts': attempts,
-                'time_taken': time_taken
-            })
-            
-        except Drill.DoesNotExist:
-            return Response(
-                {"error": "Drill not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except DrillQuestion.DoesNotExist:
-            return Response(
-                {"error": "Question not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
 
 class IsTeacher(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -980,3 +900,196 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def mark_all_as_read(self, request):
         self.get_queryset().update(is_read=True)
         return Response({"status": "all marked as read"})
+
+class DrillResultListView(generics.ListAPIView):
+    serializer_class = DrillResultSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        drill_id = self.kwargs['drill_id']
+        # Ensure the user requesting the results is the teacher who created the drill
+        # Or potentially allow students to see their own results
+        user = self.request.user
+        try:
+            drill = Drill.objects.get(id=drill_id)
+            if user.role.name == 'teacher' and drill.created_by == user:
+                 # Teacher can see all results for their drill, prefetch question_results
+                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
+            elif user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
+                 # Student can only see their own result for a drill in their classroom, prefetch question_results
+                 return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
+            else:
+                 # User is neither the teacher nor a student in the classroom
+                 from rest_framework.exceptions import PermissionDenied
+                 raise PermissionDenied("You do not have permission to view results for this drill.")
+        except Drill.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Drill not found.")
+
+# Add a view to submit answers for a single question
+class SubmitAnswerView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, drill_id, question_id):
+        try:
+            user = request.user
+            drill = Drill.objects.get(id=drill_id)
+            question = DrillQuestion.objects.get(id=question_id, drill=drill)
+
+            # Ensure student is enrolled in the classroom to submit answers
+            if user.role.name != 'student' or not drill.classroom.students.filter(id=user.id).exists():
+                 from rest_framework.exceptions import PermissionDenied
+                 raise PermissionDenied("Only students enrolled in the classroom can submit answers.")
+
+            submitted_answer_data = request.data.get('answer')
+            time_taken = request.data.get('time_taken') # Optional time taken for this question
+
+            if submitted_answer_data is None:
+                 return Response({"error": "Answer data is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Get or create the overall DrillResult for this student and drill run
+            drill_result, created = DrillResult.objects.get_or_create(
+                student=user,
+                drill=drill,
+                # You might want to find the latest run if allowing multiple attempts
+                # For simplicity now, let's assume get_or_create handles the first/current run
+                defaults={
+                    'run_number': 1, # This might need adjustment
+                    'start_time': timezone.now(),
+                    'completion_time': timezone.now(), # Will update on final submission
+                    'points': 0 # Points are aggregated from question results
+                }
+            )
+
+            # If it's not a new drill_result, you might want to ensure you're on the correct run_number
+            # This get_or_create will always give the first one. For subsequent runs, query for the latest.
+
+            # Determine if the answer is correct
+            is_correct = self.check_answer(question, submitted_answer_data)
+
+            # Calculate points based on correctness
+            points_to_award = 0
+            if is_correct:
+                # Award points based on question type
+                if question.type in ['M', 'F']:  # Multiple Choice and Fill in the Blank
+                    points_to_award = 1  # 1 point for correct answer
+                elif question.type == 'D':  # Drag and Drop
+                    points_to_award = 2  # 2 points for correct answer
+                elif question.type == 'G':  # Memory Game
+                    points_to_award = 3  # 3 points for correct answer
+                elif question.type == 'P':  # Picture Word
+                    points_to_award = 1  # 1 point for correct answer
+
+            # Create or update the QuestionResult for this specific question
+            question_result, created = QuestionResult.objects.update_or_create(
+                drill_result=drill_result,
+                question=question,
+                defaults={
+                    'submitted_answer': submitted_answer_data,
+                    'is_correct': is_correct,
+                    'time_taken': time_taken,
+                    'submitted_at': timezone.now(), # Update timestamp on each submission attempt for this question
+                    'points_awarded': points_to_award # Save the points awarded for this question
+                }
+            )
+
+            # Update overall points on DrillResult
+            drill_result.points += points_to_award
+            drill_result.save()
+
+            return Response({
+                'success': True,
+                'question_result_id': question_result.id,
+                'is_correct': is_correct,
+                'submitted_answer': question_result.submitted_answer,
+                'points_awarded': points_to_award,
+                'overall_points': drill_result.points
+            }, status=status.HTTP_201_CREATED)
+
+        except Drill.DoesNotExist:
+            return Response({"error": "Drill not found"}, status=status.HTTP_404_NOT_FOUND)
+        except DrillQuestion.DoesNotExist:
+            return Response({"error": "Question not found in this drill"}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionDenied as e:
+            return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except Exception as e:
+            import traceback
+            print(f"SubmitAnswerView Error: {e}\n{traceback.format_exc()}")
+            return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def check_answer(self, question, submitted_answer_data):
+        """Helper method to check if the submitted answer is correct."""
+        if question.type == 'M': # Multiple Choice
+            # Submitted answer is the index of the chosen option
+            try:
+                submitted_index = int(submitted_answer_data)
+                # Get the correct choice index from the question's answer field
+                correct_index = int(question.answer) if question.answer is not None else None
+                print(f"Multiple Choice - Submitted: {submitted_index}, Correct: {correct_index}, Question ID: {question.id}")  # Debug log
+                return submitted_index == correct_index
+            except (ValueError, TypeError) as e:
+                print(f"Multiple Choice Error: {e}, Question ID: {question.id}")  # Debug log
+                return False
+
+        elif question.type == 'F': # Fill in the Blank
+            try:
+                submitted_index = int(submitted_answer_data)
+                # Get the correct choice index from the question's answer field
+                correct_index = int(question.answer) if question.answer is not None else None
+                print(f"Fill in Blank - Submitted: {submitted_index}, Correct: {correct_index}, Question ID: {question.id}")  # Debug log
+                return submitted_index == correct_index
+            except (ValueError, TypeError) as e:
+                print(f"Fill in Blank Error: {e}, Question ID: {question.id}")  # Debug log
+                return False
+
+        elif question.type == 'D': # Drag and Drop
+            # Submitted answer is likely a mapping of drop zone index to drag item index
+            # Example submitted_answer_data: { "0": 2, "1": 0 } (Drop Zone 0 got Drag Item 2, Drop Zone 1 got Drag Item 0)
+            # The correct mapping is stored in question.dropZones (correctItemIndex for each zone)
+            if isinstance(submitted_answer_data, dict) and question.dropZones:
+                 is_correct = True
+                 for i, drop_zone in enumerate(question.dropZones):
+                     submitted_item_index = submitted_answer_data.get(str(i)) # Get submitted item index for this drop zone index (key is string)
+                     correct_item_index = drop_zone.get('correctItemIndex')
+
+                     # Check if submitted index matches correct index for this drop zone
+                     if submitted_item_index is None or submitted_item_index != correct_item_index:
+                         is_correct = False
+                         break # No need to check further if one mapping is incorrect
+                 return is_correct
+            return False
+
+        elif question.type == 'G': # Memory Game
+             # Submitted answer is likely the list of matched pairs
+             # Correctness for memory game is usually based on completing all matches.
+             # The backend can verify if the submitted matches are all the correct pairs.
+             if isinstance(submitted_answer_data, list) and question.memoryCards:
+                 # Get all valid pairs from question.memoryCards
+                 valid_pairs = set()
+                 for card in question.memoryCards:
+                     if card.get('id') is not None and card.get('pairId') is not None:
+                          # Store pairs consistently, e.g., as a sorted tuple of string IDs
+                          pair = tuple(sorted([str(card['id']), str(card['pairId'])]))
+                          valid_pairs.add(pair)
+
+                 # Convert submitted matches to the same format
+                 submitted_pairs = set()
+                 for match in submitted_answer_data:
+                     if isinstance(match, list) and len(match) == 2:
+                          pair = tuple(sorted([str(match[0]), str(match[1])]))
+                          submitted_pairs.add(pair)
+
+                 # Check if submitted pairs match all valid pairs
+                 return submitted_pairs == valid_pairs and len(submitted_pairs) == len(valid_pairs)
+
+             return False
+
+        elif question.type == 'P': # Picture Word
+            # Submitted answer is likely the text word entered by the student
+            # The correct answer is stored in the question's `answer` field
+            if isinstance(submitted_answer_data, str) and question.answer:
+                return submitted_answer_data.strip().lower() == question.answer.strip().lower()
+            return False
+
+        # Handle other question types or return False by default
+        return False

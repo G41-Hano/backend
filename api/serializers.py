@@ -192,8 +192,15 @@ class DrillSerializer(serializers.ModelSerializer):
             import json
             questions_data = json.loads(questions_data)
         drill = Drill.objects.create(**validated_data)
+        
+        # Process each question
         for q_idx, question_data in enumerate(questions_data):
             choices_data = question_data.pop('choices', [])
+            # Store the answer field
+            answer = question_data.get('answer')
+            print(f"Creating question with answer: {answer}")  # Debug log
+            
+            # Create the question with the answer field
             question = DrillQuestion.objects.create(drill=drill, **question_data)
             
             # Handle choices for multiple choice and fill in the blank
@@ -223,9 +230,29 @@ class DrillSerializer(serializers.ModelSerializer):
                     if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
                         file = request.FILES[media_key]
                         if file.content_type.startswith('image/'):
-                            card_data['media'] = {'url': f'/media/drill_choices/images/{file.name}', 'type': file.content_type}
+                            try:
+                                from django.core.files.storage import default_storage
+                                file_path = f'drill_choices/images/{file.name}'
+                                saved_path = default_storage.save(file_path, file)
+                                card_data['media'] = {
+                                    'url': request.build_absolute_uri(default_storage.url(saved_path)),
+                                    'type': file.content_type
+                                }
+                            except Exception as e:
+                                print(f"Error saving memory game image: {e}")
+                                card_data['media'] = None
                         elif file.content_type.startswith('video/'):
-                            card_data['media'] = {'url': f'/media/drill_choices/videos/{file.name}', 'type': file.content_type}
+                            try:
+                                from django.core.files.storage import default_storage
+                                file_path = f'drill_choices/videos/{file.name}'
+                                saved_path = default_storage.save(file_path, file)
+                                card_data['media'] = {
+                                    'url': request.build_absolute_uri(default_storage.url(saved_path)),
+                                    'type': file.content_type
+                                }
+                            except Exception as e:
+                                print(f"Error saving memory game video: {e}")
+                                card_data['media'] = None
                 question.memoryCards = memory_cards
                 question.save()
 
@@ -683,3 +710,38 @@ class WordListSerializer(serializers.ModelSerializer):
                 word.delete()
 
         return instance
+
+# Add serializer for QuestionResult
+class QuestionResultSerializer(serializers.ModelSerializer):
+    # You might want to include some question details here for easier frontend display
+    question_id = serializers.PrimaryKeyRelatedField(source='question.id', read_only=True)
+    question_text = serializers.CharField(source='question.text', read_only=True)
+    question_type = serializers.CharField(source='question.type', read_only=True)
+
+    class Meta:
+        model = QuestionResult
+        fields = ['id', 'question_id', 'question_text', 'question_type', 'submitted_answer', 'is_correct', 'time_taken', 'submitted_at', 'points_awarded']
+        read_only_fields = ['id', 'question_id', 'question_text', 'question_type', 'submitted_at'] # These are set by the backend
+
+# Add serializer for DrillResult
+class DrillResultSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()
+    question_results = QuestionResultSerializer(many=True, read_only=True) # Nested serializer for question results
+    # We cannot include nested question-specific results easily with current models
+    # For Memory Game results, we could potentially add a nested serializer here
+    # memory_game_results = MemoryGameResultSerializer(many=True, read_only=True) # This would require a reverse relationship access
+
+    class Meta:
+        model = DrillResult
+        fields = ['id', 'student', 'drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results']
+        read_only_fields = ['drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results'] # These are set by the system
+
+    def get_student(self, obj):
+        first_name = obj.student.get_decrypted_first_name() or ''
+        last_name = obj.student.get_decrypted_last_name() or ''
+        return {
+            'id': obj.student.id,
+            'username': obj.student.username,
+            'name': f'{first_name} {last_name}'.strip(),
+        }
+

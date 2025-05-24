@@ -7,7 +7,7 @@ from api.views import (
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
-    TransferRequestViewSet, NotificationViewSet
+    TransferRequestViewSet, NotificationViewSet, DrillResultListView, SubmitAnswerView
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
@@ -38,6 +38,8 @@ urlpatterns = [
     # Drill URLs
     path('api/drills/', DrillListCreateView.as_view(), name='drill_list_create'),
     path('api/drills/<int:pk>/', DrillRetrieveUpdateDestroyView.as_view(), name='drill_detail'),
+    path('api/drills/<int:drill_id>/results/', DrillResultListView.as_view(), name='drill_results_list'),
+    path('api/drills/<int:drill_id>/questions/<int:question_id>/submit/', SubmitAnswerView.as_view(), name='submit_answer'),
     
     # Transfer Request URLs
     path('api/transfer-requests/', TransferRequestViewSet.as_view({'get': 'list', 'post': 'create'}), name='transfer_request_list'),
