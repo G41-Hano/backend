@@ -11,6 +11,7 @@ from api.views import (
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
+from api.viewsets.gen_ai import GenAIView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 # API endpoints
@@ -58,7 +59,10 @@ urlpatterns = [
 
     # Custom Word List URLs
     path('api/wordlist/', WordListView.as_view({'get':'list', 'post':'create'}), name='wordlist_list'),
-    path('api/wordlist/<int:pk>/', WordListView.as_view({'get':'retrieve', 'put':'update', 'delete':'destroy'}), name='wordlist_detail')
+    path('api/wordlist/<int:pk>/', WordListView.as_view({'get':'retrieve', 'put':'update', 'delete':'destroy'}), name='wordlist_detail'),
+
+    # Gen. AI URL
+    path('api/gen-ai/', GenAIView.as_view(), name='gen-ai'),
 ]
 
 # Serve media files in development
