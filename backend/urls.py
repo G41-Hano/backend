@@ -7,7 +7,7 @@ from api.views import (
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
-    TransferRequestViewSet, NotificationViewSet
+    TransferRequestViewSet, NotificationViewSet, upload_image, upload_video
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
@@ -58,7 +58,11 @@ urlpatterns = [
 
     # Custom Word List URLs
     path('api/wordlist/', WordListView.as_view({'get':'list', 'post':'create'}), name='wordlist_list'),
-    path('api/wordlist/<int:pk>/', WordListView.as_view({'get':'retrieve', 'put':'update', 'delete':'destroy'}), name='wordlist_detail')
+    path('api/wordlist/<int:pk>/', WordListView.as_view({'get':'retrieve', 'put':'update', 'delete':'destroy'}), name='wordlist_detail'),
+
+    # Upload Image and Video URLs
+    path('api/upload-image/', upload_image, name='upload_image'),
+    path('api/upload-video/', upload_video, name='upload_video'),
 ]
 
 # Serve media files in development

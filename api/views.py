@@ -22,6 +22,7 @@ from api.utils.encryption import decrypt  # Import the decrypt function
 from cryptography.fernet import InvalidToken  # Import the InvalidToken exception
 from django.utils import timezone
 from django.db import models
+import os
 
 # Create your views here.
 
@@ -477,6 +478,7 @@ class DrillListCreateView(generics.ListCreateAPIView):
             'classroom': data.get('classroom'),
             'status': data.get('status'),
             'questions_input': questions_input,
+            'custom_wordlist': data.get('custom_wordlist'),
         }
         serializer = self.get_serializer(data=serializer_data, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -980,3 +982,59 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def mark_all_as_read(self, request):
         self.get_queryset().update(is_read=True)
         return Response({"status": "all marked as read"})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_image(request):
+    if 'image' not in request.FILES:
+        return Response({'error': 'No image file provided'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    image_file = request.FILES['image']
+    
+    # Validate file type
+    if not image_file.content_type.startswith('image/'):
+        return Response({'error': 'Invalid file type. Only image files are allowed.'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    # Generate a unique filename
+    filename = f"vocabulary/images/{os.path.basename(image_file.name)}"
+    
+    try:
+        # Save the file
+        saved_path = default_storage.save(filename, image_file)
+        
+        # Get the URL of the saved file
+        file_url = request.build_absolute_uri(default_storage.url(saved_path))
+        
+        return Response({'url': file_url}, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_video(request):
+    if 'video' not in request.FILES:
+        return Response({'error': 'No video file provided'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    video_file = request.FILES['video']
+    
+    # Validate file type
+    if not video_file.content_type.startswith('video/'):
+        return Response({'error': 'Invalid file type. Only video files are allowed.'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    # Generate a unique filename
+    filename = f"vocabulary/videos/{os.path.basename(video_file.name)}"
+    
+    try:
+        # Save the file
+        saved_path = default_storage.save(filename, video_file)
+        
+        # Get the URL of the saved file
+        file_url = request.build_absolute_uri(default_storage.url(saved_path))
+        
+        return Response({'url': file_url}, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

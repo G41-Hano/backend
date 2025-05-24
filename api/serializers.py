@@ -177,21 +177,43 @@ class DrillSerializer(serializers.ModelSerializer):
     questions = serializers.SerializerMethodField()
     questions_input = serializers.ListField(write_only=True, required=False)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
+    custom_wordlist = serializers.PrimaryKeyRelatedField(queryset=WordList.objects.all(), required=False, allow_null=True)
+    wordlist_name = serializers.SerializerMethodField()
+    wordlist_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Drill
-        fields = ['id', 'title', 'description', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status']
+        fields = ['id', 'title', 'description', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id']
 
     def get_questions(self, obj):
         return DrillQuestionSerializer(obj.questions.all(), many=True).data
 
+    def get_wordlist_name(self, obj):
+        if obj.custom_wordlist:
+            return obj.custom_wordlist.name
+        # Optionally, handle builtin wordlist if you have that field
+        return None
+
+    def get_wordlist_id(self, obj):
+        if obj.custom_wordlist:
+            return obj.custom_wordlist.id
+        # Optionally, handle builtin wordlist if you have that field
+        return None
+
     def create(self, validated_data):
         request = self.context.get('request')
         questions_data = validated_data.pop('questions_input', [])
+        custom_wordlist = validated_data.pop('custom_wordlist', None)
+
         if isinstance(questions_data, str):
             import json
             questions_data = json.loads(questions_data)
+
         drill = Drill.objects.create(**validated_data)
+        if custom_wordlist:
+            drill.custom_wordlist = custom_wordlist
+            drill.save()
+
         for q_idx, question_data in enumerate(questions_data):
             choices_data = question_data.pop('choices', [])
             question = DrillQuestion.objects.create(drill=drill, **question_data)
