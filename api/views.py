@@ -1,12 +1,12 @@
 from django.shortcuts import render
-from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult
+from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult, Badge
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 from rest_framework import generics, viewsets, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer, TransferRequestSerializer, NotificationSerializer, DrillResultSerializer
+from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer, TransferRequestSerializer, NotificationSerializer, DrillResultSerializer, BadgeSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -22,6 +22,7 @@ from api.utils.encryption import decrypt  # Import the decrypt function
 from cryptography.fernet import InvalidToken  # Import the InvalidToken exception
 from django.utils import timezone
 from django.db import models
+from django.db.models import Sum, Avg, Max
 
 # Create your views here.
 
@@ -207,7 +208,7 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
 
     def get(self, request, pk):
         """
-        Get a list of students enrolled in the classroom.
+        Get a list of students enrolled in the classroom or the leaderboard.
         """
         try:
             classroom = Classroom.objects.get(pk=pk)
@@ -217,6 +218,45 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                     status=status.HTTP_403_FORBIDDEN
                 )
             
+            # Check if this is a leaderboard request
+            if request.path.endswith('/leaderboard/'):
+                # Get all students in the classroom
+                students = classroom.students.all()
+                
+                leaderboard_data = []
+                for student in students:
+                    # Get all drill results for this student in this classroom
+                    drill_results = DrillResult.objects.filter(
+                        student=student,
+                        drill__classroom=classroom
+                    ).select_related('drill')
+                    
+                    # Calculate total points using the best score for each drill
+                    classroom_points = 0
+                    drill_scores = {}  # Track best scores per drill
+                    
+                    for result in drill_results:
+                        drill_id = result.drill.id
+                        if drill_id not in drill_scores or result.points > drill_scores[drill_id]:
+                            drill_scores[drill_id] = result.points
+                    
+                    # Sum up the best scores
+                    classroom_points = sum(drill_scores.values())
+                    
+                    leaderboard_data.append({
+                        'id': student.id,
+                        'first_name': student.get_decrypted_first_name(),
+                        'last_name': student.get_decrypted_last_name(),
+                        'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None,
+                        'points': classroom_points,
+                        'drill_scores': drill_scores  # Include drill scores for detailed view
+                    })
+                
+                # Sort by points in descending order
+                leaderboard_data.sort(key=lambda x: x['points'], reverse=True)
+                return Response(leaderboard_data)
+            
+            # Regular student list request
             students = classroom.students.all()
             return Response({
                 'count': students.count(),
@@ -229,6 +269,61 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                     } for student in students
                 ]
             })
+        except Classroom.DoesNotExist:
+            return Response(
+                {'error': 'Classroom not found'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    @action(detail=True, methods=['get'])
+    def leaderboard(self, request, pk):
+        """
+        Get the leaderboard for a classroom showing student rankings based on points.
+        """
+        try:
+            classroom = Classroom.objects.get(pk=pk)
+            if request.user != classroom.teacher and request.user not in classroom.students.all():
+                return Response(
+                    {"error": "You don't have permission to view this classroom's leaderboard"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Get all students in the classroom
+            students = classroom.students.all()
+            
+            leaderboard_data = []
+            for student in students:
+                # Get all drill results for this student in this classroom
+                drill_results = DrillResult.objects.filter(
+                    student=student,
+                    drill__classroom=classroom
+                ).select_related('drill')
+                
+                # Calculate total points using the best score for each drill
+                classroom_points = 0
+                drill_scores = {}  # Track best scores per drill
+                
+                for result in drill_results:
+                    drill_id = result.drill.id
+                    if drill_id not in drill_scores or result.points > drill_scores[drill_id]:
+                        drill_scores[drill_id] = result.points
+                
+                # Sum up the best scores
+                classroom_points = sum(drill_scores.values())
+                
+                leaderboard_data.append({
+                    'id': student.id,
+                    'first_name': student.get_decrypted_first_name(),
+                    'last_name': student.get_decrypted_last_name(),
+                    'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None,
+                    'points': classroom_points,
+                    'drill_scores': drill_scores  # Include drill scores for detailed view
+                })
+            
+            # Sort by points in descending order
+            leaderboard_data.sort(key=lambda x: x['points'], reverse=True)
+            return Response(leaderboard_data)
+            
         except Classroom.DoesNotExist:
             return Response(
                 {'error': 'Classroom not found'}, 
@@ -1035,18 +1130,20 @@ class SubmitAnswerView(APIView):
             drill_result, created = DrillResult.objects.get_or_create(
                 student=user,
                 drill=drill,
-                # You might want to find the latest run if allowing multiple attempts
-                # For simplicity now, let's assume get_or_create handles the first/current run
                 defaults={
-                    'run_number': 1, # This might need adjustment
+                    'run_number': 1,
                     'start_time': timezone.now(),
-                    'completion_time': timezone.now(), # Will update on final submission
-                    'points': 0 # Points are aggregated from question results
+                    'completion_time': timezone.now(),
+                    'points': 0
                 }
             )
 
-            # If it's not a new drill_result, you might want to ensure you're on the correct run_number
-            # This get_or_create will always give the first one. For subsequent runs, query for the latest.
+            # If it's not a new drill_result, increment run number and reset points
+            if not created:
+                drill_result.run_number += 1
+                drill_result.completion_time = timezone.now()
+                drill_result.points = 0  # Reset points for new attempt
+                drill_result.save()
 
             # Determine if the answer is correct
             is_correct = self.check_answer(question, submitted_answer_data)
@@ -1072,8 +1169,8 @@ class SubmitAnswerView(APIView):
                     'submitted_answer': submitted_answer_data,
                     'is_correct': is_correct,
                     'time_taken': time_taken,
-                    'submitted_at': timezone.now(), # Update timestamp on each submission attempt for this question
-                    'points_awarded': points_to_award # Save the points awarded for this question
+                    'submitted_at': timezone.now(),
+                    'points_awarded': points_to_award
                 }
             )
 
@@ -1081,13 +1178,21 @@ class SubmitAnswerView(APIView):
             drill_result.points += points_to_award
             drill_result.save()
 
+            # Get the best score for this drill
+            best_score = DrillResult.objects.filter(
+                student=user,
+                drill=drill
+            ).aggregate(best_score=models.Max('points'))['best_score'] or 0
+
             return Response({
                 'success': True,
                 'question_result_id': question_result.id,
                 'is_correct': is_correct,
                 'submitted_answer': question_result.submitted_answer,
                 'points_awarded': points_to_award,
-                'overall_points': drill_result.points
+                'current_points': drill_result.points,
+                'best_score': best_score,
+                'run_number': drill_result.run_number
             }, status=status.HTTP_201_CREATED)
 
         except Drill.DoesNotExist:
@@ -1177,3 +1282,184 @@ class SubmitAnswerView(APIView):
 
         # Handle other question types or return False by default
         return False
+
+class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = BadgeSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role.name == 'teacher':
+            return Badge.objects.all()
+        return user.badges.all()
+
+    @action(detail=False, methods=['get'])
+    def student_badges(self, request):
+        student_id = request.query_params.get('student_id')
+        if not student_id:
+            return Response({'error': 'student_id is required'}, status=400)
+        
+        try:
+            student = User.objects.get(id=student_id, role__name='student')
+            if request.user.role.name == 'teacher' or request.user.id == student.id:
+                badges = student.badges.all()
+                serializer = self.get_serializer(badges, many=True)
+                return Response(serializer.data)
+            return Response({'error': 'Not authorized to view these badges'}, status=403)
+        except User.DoesNotExist:
+            return Response({'error': 'Student not found'}, status=404)
+
+    @action(detail=False, methods=['get'])
+    def badge_statistics(self, request):
+        user = request.user
+        if user.role.name == 'teacher':
+            # Get statistics for all students
+            total_badges = Badge.objects.count()
+            students_with_badges = User.objects.filter(role__name='student', badges__isnull=False).distinct().count()
+            total_students = User.objects.filter(role__name='student').count()
+            return Response({
+                'total_badges': total_badges,
+                'students_with_badges': students_with_badges,
+                'total_students': total_students,
+                'badge_completion_rate': (students_with_badges / total_students * 100) if total_students > 0 else 0
+            })
+        else:
+            # Get statistics for the current student
+            earned_badges = user.badges.count()
+            total_badges = Badge.objects.count()
+            return Response({
+                'earned_badges': earned_badges,
+                'total_badges': total_badges,
+                'badge_completion_rate': (earned_badges / total_badges * 100) if total_badges > 0 else 0
+            })
+
+    @action(detail=False, methods=['get'])
+    def points_statistics(self, request):
+        user = request.user
+        if user.role.name == 'teacher':
+            # Get points statistics for all students
+            students = User.objects.filter(role__name='student')
+            total_points = students.aggregate(total=Sum('total_points'))['total'] or 0
+            avg_points = students.aggregate(avg=Avg('total_points'))['avg'] or 0
+            max_points = students.aggregate(max=Max('total_points'))['max'] or 0
+            return Response({
+                'total_points': total_points,
+                'average_points': avg_points,
+                'max_points': max_points,
+                'total_students': students.count()
+            })
+        else:
+            # Get points statistics for the current student
+            return Response({
+                'total_points': user.total_points,
+                'points_to_next_badge': self._get_points_to_next_badge(user)
+            })
+
+    @action(detail=False, methods=['get'])
+    def all_student_points(self, request):
+        """
+        Get points for students:
+        - Teachers can see all students' points
+        - Students can only see their own points
+        """
+        # First check if user is authenticated
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        # Then check if user has a role
+        if not hasattr(request.user, 'role'):
+            return Response(
+                {'error': 'User has no role assigned'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            if request.user.role.name == 'teacher':
+                # Teachers can see all students
+                students = User.objects.filter(role__name='student')
+                student_points = []
+                for student in students:
+                    # Calculate total points from all drills across all classrooms
+                    total_points = DrillResult.objects.filter(
+                        student=student
+                    ).aggregate(total=Sum('points'))['total'] or 0
+                    
+                    # Get points breakdown by classroom
+                    classroom_points = []
+                    for classroom in Classroom.objects.filter(students=student):
+                        classroom_total = DrillResult.objects.filter(
+                            student=student,
+                            drill__classroom=classroom
+                        ).aggregate(total=Sum('points'))['total'] or 0
+                        
+                        classroom_points.append({
+                            'classroom_id': classroom.id,
+                            'classroom_name': classroom.name,
+                            'points': classroom_total
+                        })
+                    
+                    student_points.append({
+                        'id': student.id,
+                        'first_name': student.get_decrypted_first_name(),
+                        'last_name': student.get_decrypted_last_name(),
+                        'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None,
+                        'total_points': total_points,
+                        'classroom_points': classroom_points,
+                        'badges_count': student.badges.count()
+                    })
+                
+                # Sort by total points in descending order
+                student_points.sort(key=lambda x: x['total_points'], reverse=True)
+                return Response(student_points)
+            else:
+                # Students can only see themselves
+                student = request.user
+                # Calculate total points from all drills across all classrooms
+                total_points = DrillResult.objects.filter(
+                    student=student
+                ).aggregate(total=Sum('points'))['total'] or 0
+                
+                # Get points breakdown by classroom
+                classroom_points = []
+                for classroom in Classroom.objects.filter(students=student):
+                    classroom_total = DrillResult.objects.filter(
+                        student=student,
+                        drill__classroom=classroom
+                    ).aggregate(total=Sum('points'))['total'] or 0
+                    
+                    classroom_points.append({
+                        'classroom_id': classroom.id,
+                        'classroom_name': classroom.name,
+                        'points': classroom_total
+                    })
+                
+                return Response({
+                    'id': student.id,
+                    'first_name': student.get_decrypted_first_name(),
+                    'last_name': student.get_decrypted_last_name(),
+                    'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None,
+                    'total_points': total_points,
+                    'classroom_points': classroom_points,
+                    'badges_count': student.badges.count()
+                })
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Error retrieving student points: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def _get_points_to_next_badge(self, user):
+        """Helper method to calculate points needed for next badge"""
+        current_points = user.total_points
+        next_badge = Badge.objects.filter(
+            points_required__gt=current_points,
+            is_first_drill=False
+        ).order_by('points_required').first()
+        
+        if next_badge:
+            return next_badge.points_required - current_points
+        return 0

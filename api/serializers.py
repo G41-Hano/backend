@@ -20,42 +20,45 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
     return token
 
 
+class BadgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Badge
+        fields = ['id', 'name', 'description', 'image', 'points_required', 'is_first_drill']
+
 class UserSerializer(serializers.ModelSerializer):
-  role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
-  role_input = serializers.ChoiceField(choices=Role.ROLE_CHOICES, write_only=True, required=True)
+    first_name = serializers.SerializerMethodField()
+    last_name = serializers.SerializerMethodField()
+    role = serializers.SerializerMethodField()
+    badges = BadgeSerializer(many=True, read_only=True)
+    total_points = serializers.IntegerField(read_only=True)
 
-  class Meta:
-    model = User
-    fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar"]
-    extra_kwargs = {"password": {"write_only": True},
-                    "first_name_encrypted": {"read_only": True},
-                    "last_name_encrypted": {"read_only": True},
-                    }     # exclude this data when it is requested
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'avatar', 'badges', 'total_points']
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'email': {'required': True}
+        }
 
-  def create(self, validated_data):
-    role_name = validated_data.pop("role_input")          # Extract role from data
-    user = User.objects.create_user(**validated_data)     # Create user object (password already hashed)
-    Role.objects.create(user=user, name=role_name)        # Create role object (to know if user is student or teacher)
-    return user
-  
-  def to_representation(self, instance):
-    """Decrypt first and last name for output"""
-    ret = super().to_representation(instance)
+    def get_first_name(self, obj):
+        return obj.get_decrypted_first_name()
 
-    # Decrypt first name using the model method
-    try:
-      ret['first_name'] = instance.get_decrypted_first_name()
-    except Exception as e:
-      ret['first_name'] = "ERROR NAME"
-    
-    # Decrypt last name using the model method
-    try:
-      ret['last_name'] = instance.get_decrypted_last_name()
-    except Exception as e:
-      ret['last_name'] = "ERROR NAME"
+    def get_last_name(self, obj):
+        return obj.get_decrypted_last_name()
 
-    return ret
-  
+    def get_role(self, obj):
+        return obj.role.name if hasattr(obj, 'role') else None
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            password=validated_data['password'],
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', '')
+        )
+        return user
+
 class ResetPasswordRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
