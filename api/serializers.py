@@ -580,6 +580,12 @@ class TransferRequestSerializer(serializers.ModelSerializer):
 
         return data
 
+class PromptSerializer(serializers.Serializer):
+    prompt = serializers.CharField(max_length=5000) # Adjust max_length as needed
+    system_message = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    temperature = serializers.FloatField(required=False, default=0.7)
+    max_tokens = serializers.IntegerField(required=False, default=500)
+
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
