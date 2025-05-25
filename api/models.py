@@ -210,7 +210,9 @@ class Notification(models.Model):
     TYPE_CHOICES = [
         ('student_transfer', 'Student Transfer Request'),
         ('transfer_approved', 'Transfer Approved'),
-        ('transfer_rejected', 'Transfer Rejected')
+        ('transfer_rejected', 'Transfer Rejected'),
+        ('student_added', 'Student Added to Classroom'),
+        ('student_removed', 'Student Removed from Classroom')
     ]
     
     id = models.AutoField(primary_key=True)

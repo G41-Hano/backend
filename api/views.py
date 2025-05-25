@@ -243,12 +243,6 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
         {
             "student_ids": [1, 2, 3]  // List of student user IDs to enroll
         }
-        
-        Rules:
-        - Only teachers can add students
-        - Maximum 50 students per classroom
-        - Cannot add already enrolled students
-        - Can only add users with student role
         """
         # Check if user is a teacher
         if request.user.role.name != 'teacher':
@@ -303,6 +297,21 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                 )
 
             classroom.students.add(*students)
+
+            # Create notifications for each added student
+            for student in students:
+                Notification.objects.create(
+                    recipient=student,
+                    type='student_added',
+                    message=f"You have been added to the classroom {classroom.name} by {request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}",
+                    data={
+                        'classroom_id': classroom.id,
+                        'classroom_name': classroom.name,
+                        'teacher_id': request.user.id,
+                        'teacher_name': f"{request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}"
+                    }
+                )
+
             return Response(
                 {
                     'success': 'Students added successfully',
@@ -325,10 +334,6 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
         {
             "student_ids": [1, 2, 3]  // List of student user IDs to remove
         }
-        
-        Rules:
-        - Only teachers can remove students
-        - Can only remove enrolled students
         """
         # Check if user is a teacher
         if request.user.role.name != 'teacher':
@@ -358,6 +363,20 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                         "not_enrolled_ids": list(not_enrolled)
                     }, 
                     status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create notifications for each removed student
+            for student in enrolled_students:
+                Notification.objects.create(
+                    recipient=student,
+                    type='student_removed',
+                    message=f"You have been removed from the classroom {classroom.name} by {request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}",
+                    data={
+                        'classroom_id': classroom.id,
+                        'classroom_name': classroom.name,
+                        'teacher_id': request.user.id,
+                        'teacher_name': f"{request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}"
+                    }
                 )
 
             classroom.students.remove(*enrolled_students)
@@ -830,7 +849,16 @@ class MemoryGameSubmissionView(APIView):
 
 class IsTeacher(permissions.BasePermission):
     def has_permission(self, request, view):
-        return request.user.role.name == 'teacher'
+        try:
+            return request.user.role.name == 'teacher'
+        except (AttributeError, Role.DoesNotExist):
+            return False
+
+    def has_object_permission(self, request, view, obj):
+        # For transfer requests, check if user is either the requesting teacher or the receiving teacher
+        if isinstance(obj, TransferRequest):
+            return (request.user == obj.requested_by) or (request.user == obj.to_classroom.teacher)
+        return True
 
 class TransferRequestViewSet(viewsets.ModelViewSet):
     serializer_class = TransferRequestSerializer
@@ -843,6 +871,14 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
             models.Q(requested_by=user) | 
             models.Q(to_classroom__teacher=user)
         )
+
+    def get_permissions(self):
+        """
+        Override get_permissions to allow any authenticated user to delete their own requests
+        """
+        if self.action == 'destroy':
+            return [IsAuthenticated()]
+        return [IsAuthenticated(), IsTeacher()]
 
     def perform_create(self, serializer):
         # Create transfer request
@@ -863,6 +899,42 @@ class TransferRequestViewSet(viewsets.ModelViewSet):
                 'to_classroom_name': transfer_request.to_classroom.name
             }
         )
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            transfer_request = self.get_object()
+            
+            # Check if request is still pending
+            if transfer_request.status != 'pending':
+                return Response(
+                    {"error": f"Cannot delete a request that has been {transfer_request.status}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Delete associated notification
+            Notification.objects.filter(
+                type='student_transfer',
+                data__transfer_request_id=transfer_request.id
+            ).delete()
+            
+            # Delete the transfer request
+            transfer_request.delete()
+            
+            return Response(
+                {"message": "Transfer request deleted successfully"},
+                status=status.HTTP_200_OK
+            )
+            
+        except TransferRequest.DoesNotExist:
+            return Response(
+                {"error": "Transfer request not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=False, methods=['get'])
     def available_classrooms(self, request):
@@ -968,6 +1040,18 @@ class NotificationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Notification.objects.filter(recipient=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        notification = self.get_object()
+        
+        # Only allow users to delete their own notifications
+        if notification.recipient != request.user:
+            return Response(
+                {"error": "You can only delete your own notifications"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+            
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'])
     def mark_as_read(self, request, pk=None):
