@@ -23,23 +23,45 @@ class GenAIView(APIView):
       temperature = serializer.validated_data.get('temperature')
       max_tokens = serializer.validated_data.get('max_tokens')
 
-      # Use the OpenRouterService for non-streaming response
-      response_data = openrouter_service.generate_text(
-        prompt=prompt,
-        system_message=system_message,
-        temperature=temperature,
-        max_tokens=max_tokens
-      )
-
-      if response_data:
-        generated_text = response_data["choices"][0]["message"]["content"]
-        return Response({"response": generated_text}, status=status.HTTP_200_OK)
-      else:
-        return Response(
-          {"error": "Failed to get response from AI"},
-          status=status.HTTP_500_INTERNAL_SERVER_ERROR
+      try:
+        # Use the OpenRouterService for non-streaming response
+        response_data = openrouter_service.generate_text(
+          prompt=prompt,
+          system_message=system_message,
+          temperature=temperature,
+          max_tokens=max_tokens
         )
+        # print(response_data)
+        if response_data and 'choices' in response_data and len(response_data['choices']) > 0:
+          generated_text = response_data["choices"][0]["message"]["content"]
+          return Response({"response": generated_text}, status=status.HTTP_200_OK)
+        else:
+          return Response(
+            {"error": "AI response format unexpected or service unavailable after retries."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE 
+          )
+      except Exception as e: # Catch any exceptions that bubble up from openrouter_service.generate_text
+        # Log the full error for debugging
+        print(f"Unhandled exception in ChatAPIView: {e}")
+        return Response(
+            {"error": "An unexpected error occurred while communicating with the AI service. Please try again later."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+        
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
   
+class GenAICheckLimitView(APIView):
+  def get(self, request):
+    response_data = openrouter_service.check_limit()
+    
+    if response_data:
+      generated_text = response_data["data"]
+      return Response({"response": generated_text}, status=status.HTTP_200_OK)
+    else:
+      return Response(
+        {"error": "Failed to establish connection with OpenRouter"},
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+      )
+
 
 

@@ -32,6 +32,15 @@ class OpenRouterService:
     except requests.exceptions.RequestException as e:
       print(f"Error calling OpenRouter API: {e}")
       return None
+    
+  def check_limit(self):
+    try:
+      response = requests.get("https://openrouter.ai/api/v1/auth/key", headers=self.headers)
+      response.raise_for_status()
+      return response.json()
+    except requests.exceptions.RequestException as e:
+      print(f"Error calling OpenRouter API: {e}")
+      return None
 
 # Initialize the service with API key from settings
 openrouter_service = OpenRouterService(api_key=settings.OPENROUTER_API_KEY)

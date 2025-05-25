@@ -11,7 +11,7 @@ from api.views import (
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
-from api.viewsets.gen_ai import GenAIView
+from api.viewsets.gen_ai import GenAIView, GenAICheckLimitView
 from rest_framework_simplejwt.views import TokenRefreshView
 
 # API endpoints
@@ -62,6 +62,7 @@ urlpatterns = [
     path('api/wordlist/<int:pk>/', WordListView.as_view({'get':'retrieve', 'put':'update', 'delete':'destroy'}), name='wordlist_detail'),
 
     # Gen. AI URL
+    path('api/gen-ai/checklimit/', GenAICheckLimitView.as_view(), name='gen-ai-checklimit'),
     path('api/gen-ai/', GenAIView.as_view(), name='gen-ai'),
 ]
 
