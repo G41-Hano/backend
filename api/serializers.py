@@ -248,6 +248,11 @@ class DrillSerializer(serializers.ModelSerializer):
             drill.save()
 
         for q_idx, question_data in enumerate(questions_data):
+            # Remove frontend-only fields not in the model
+            for key in ['letterChoices']:
+                if key in question_data and not hasattr(DrillQuestion, key):
+                    question_data.pop(key)
+            
             choices_data = question_data.pop('choices', [])
             question = DrillQuestion.objects.create(drill=drill, **question_data)
             
@@ -422,6 +427,11 @@ class DrillSerializer(serializers.ModelSerializer):
                 else:
                     # Create new question
                     try:
+                        # Remove frontend-only fields not in the model
+                        for key in ['letterChoices']:
+                            if key in question_dict and not hasattr(DrillQuestion, key):
+                                question_dict.pop(key)
+                        
                         question = DrillQuestion.objects.create(drill=instance, **question_dict)
                         questions_to_keep.append(question.id)
                     except Exception as e:

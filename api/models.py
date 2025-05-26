@@ -156,6 +156,7 @@ class DrillQuestion(models.Model):
   memoryCards = models.JSONField(default=list, blank=True, null=True)  # For memory game cards
   pictureWord = models.JSONField(default=list, blank=True, null=True)  # For picture word questions
   answer = models.TextField(max_length=200, blank=True, null=True)  # Add answer field
+  letterChoices = models.JSONField(null=True, blank=True)  # <-- add this line
 
   #fields for learning content drill
   story_title = models.CharField(max_length=100, blank=True, null=True)
