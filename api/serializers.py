@@ -3,6 +3,8 @@ from .models import *
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .utils.encryption import encrypt, decrypt
 from collections import Counter
+from urllib.parse import urlparse
+import os
 
 # Serializers that convert the Django Object to JSON, and vice versa
 
@@ -351,180 +353,229 @@ class DrillSerializer(serializers.ModelSerializer):
             questions_to_keep = []
             
             # Process each question in the input
-            for question_data in questions_data:
+            for q_idx, question_data in enumerate(questions_data):
                 # Handle string conversion if needed
                 if isinstance(question_data, str):
                     try:
                         import json
                         question_data = json.loads(question_data)
-                    except:
+                    except Exception as e:
+                        print(f"Error parsing question data JSON string: {e}")
                         continue
-                
+
                 if not isinstance(question_data, dict):
+                    print(f"Skipping invalid question data: {question_data}")
                     continue
-                
-                # Safe copy to avoid modifying the original
+
+                # Safe copy to avoid modifying the original and ensure 'answer' is present
                 question_dict = question_data.copy()
-                
+
                 # Extract question ID if present
                 question_id = None
                 if 'id' in question_dict:
                     try:
+                        # Ensure id is treated as string for consistent comparison
                         question_id = str(question_dict.pop('id'))
-                    except (TypeError, ValueError):
+                    except (TypeError, ValueError) as e:
+                        print(f"Error processing question ID: {e}")
                         question_id = None
-                
+
                 choices_data = []
                 if 'choices' in question_dict:
                     choices = question_dict.pop('choices')
                     if isinstance(choices, list):
                         choices_data = choices
+                    else:
+                         print(f"Warning: Expected choices to be a list, but got {type(choices)}")
+
+                # Fields that should *not* be directly set on the model from incoming data
+                # Remove fields that are not model fields or are handled separately (like choices_data)
+                fields_to_exclude_from_direct_set = ['created_at', 'updated_at', 'choices', 'dragItems', 'dropZones', 'memoryCards', 'pictureWord', 'id']
                 
-                # Remove fields that shouldn't be part of the model
-                for field in ['created_at', 'updated_at', 'answer']:
-                    if field in question_dict:
-                        question_dict.pop(field)
-                
+                # Ensure 'answer' is NOT in fields_to_exclude_from_direct_set
+                # The 'answer' field from question_dict should be set on the model
+
+
                 # Handle existing question update
                 question = None
                 if question_id and question_id in existing_questions:
                     question = existing_questions[question_id]
-                    # Update fields
-                    for attr, value in question_dict.items():
-                        setattr(question, attr, value)
-                    question.save()
-                    questions_to_keep.append(question.id)
                     
-                    # Delete existing choices for this question
-                    question.choices.all().delete()
+                    # Log question before update
+                    print(f"Updating existing question {question.id}. Before update: answer={question.answer}, text={question.text}, type={question.type}")
+                    print(f"Incoming question_dict for update: {question_dict}")
+
+                    # Update fields by iterating through incoming data
+                    # Explicitly set the answer field here
+                    if 'answer' in question_dict:
+                        question.answer = question_dict['answer']
+                        
+                    # Update other fields, excluding those we handle separately or shouldn't set directly
+                    for attr, value in question_dict.items():
+                         if attr not in fields_to_exclude_from_direct_set and hasattr(question, attr):
+                              setattr(question, attr, value)
+
+                    # Log question after setting attributes, before saving
+                    print(f"Question {question.id} after setting attributes (before save): answer={question.answer}, text={question.text}, type={question.type}")
+
+                    question.save()
+
+                    # Log question after saving
+                    print(f"Question {question.id} after save: answer={question.answer}, text={question.text}, type={question.type}")
+
+                    questions_to_keep.append(question.id)
+
+                    # Delete existing choices for this question before adding new ones (only for M and F)
+                    if question.type in ['M', 'F']:
+                         question.choices.all().delete()
+
                 else:
                     # Create new question
+                    # Use the incoming question_dict directly, which should include 'answer'
+                    print(f"Creating new question with dict: {question_dict}")
                     try:
+                        # Remove fields that shouldn't be in create dict
+                        for field in fields_to_exclude_from_direct_set:
+                             if field in question_dict:
+                                  question_dict.pop(field)
+
+                        # Ensure 'answer' is not popped if it exists
+                        
                         question = DrillQuestion.objects.create(drill=instance, **question_dict)
+
+                        # Log newly created question
+                        print(f"Successfully created new question {question.id}: answer={question.answer}, text={question.text}, type={question.type}")
+
                         questions_to_keep.append(question.id)
                     except Exception as e:
                         print(f"Error creating question: {e}")
-                        continue
-                
-                # Add choices if we have a valid question
-                if question:
-                    for choice_data in choices_data:
-                        try:
+                        # Log the dict that failed to create
+                        print(f"Failed to create question with dict: {question_dict}")
+                        continue # Skip this question if creation fails
+
+                # Add choices if we have a valid question and it's M or F type
+                if question and question.type in ['M', 'F']:
+                    for c_idx, choice_data in enumerate(choices_data):
+                         try:
                             if isinstance(choice_data, str):
-                                import json
-                                choice_data = json.loads(choice_data)
-                            
+                                try:
+                                    import json
+                                    choice_data = json.loads(choice_data)
+                                except Exception as e:
+                                    print(f"Error parsing choice data JSON string: {e}")
+                                    continue # Skip this choice if parsing fails
+
                             if not isinstance(choice_data, dict):
+                                print(f"Skipping invalid choice data: {choice_data}")
                                 continue
-                                
+
                             # Handle media
                             media_key = None
-                            if 'media' in choice_data:
+                            # Only pop media if it's intended to be handled as a file upload key
+                            # Keep existing media data if it's an object with a URL
+                            if 'media' in choice_data and isinstance(choice_data['media'], str) and request and choice_data['media'] in request.FILES:
                                 media_key = choice_data.pop('media')
-                            
+
                             image = None
                             video = None
-                            
-                            # Handle new file uploads
+
+                            # Handle new file uploads referenced by media_key
                             if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
                                 file = request.FILES[media_key]
                                 if file.content_type.startswith('image/'):
                                     image = file
                                 elif file.content_type.startswith('video/'):
                                     video = file
-                            # Handle existing media
-                            elif media_key and isinstance(media_key, dict):
-                                # Check if the media has a URL
-                                if 'url' in media_key:
-                                    url = media_key['url']
-                                    # Extract filename from URL
-                                    import os
-                                    from urllib.parse import urlparse
+                            # Handle existing media if it's already a URL or file path string
+                            elif 'media' in choice_data and (isinstance(choice_data['media'], str) or (isinstance(choice_data['media'], dict) and 'url' in choice_data['media'])):
+                                # If it's a dict with a url, use the url
+                                media_value = choice_data['media']
+                                url = media_value['url'] if isinstance(media_value, dict) else media_value
+
+                                # Try to determine if it's an image or video from the URL or type
+                                is_image = False
+                                is_video = False
+
+                                # Check if type is provided in the original media_value dict
+                                if isinstance(media_value, dict) and 'type' in media_value and isinstance(media_value['type'], str):
+                                    is_image = media_value['type'].startswith('image/')
+                                    is_video = media_value['type'].startswith('video/')
                                     
-                                    # Try to determine if it's an image or video from the URL or type
-                                    is_image = False
-                                    is_video = False
-                                    
-                                    # Check if type is provided
-                                    media_type = media_key.get('type', '')
-                                    if isinstance(media_type, str):
-                                        is_image = media_type.startswith('image/')
-                                        is_video = media_type.startswith('video/')
-                                    
-                                    # If no type or couldn't determine, try from URL extension
-                                    if not (is_image or is_video):
-                                        parsed_url = urlparse(url)
-                                        path = parsed_url.path
-                                        ext = os.path.splitext(path)[1].lower()
-                                        is_image = ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']
-                                        is_video = ext in ['.mp4', '.webm', '.mov', '.avi']
-                                    
-                                    # extract the relative path from the URL
-                                    # Find the media path in the URL
-                                    if '/media/' in url:
-                                        relative_path = url.split('/media/')[1]
-                                        
-                                        if is_image:
-                                            from django.core.files.storage import default_storage
-                                            if default_storage.exists(f"drill_choices/images/{os.path.basename(relative_path)}"):
-                                                image = f"drill_choices/images/{os.path.basename(relative_path)}"
-                                            else:
-                                                image = relative_path
-                                        elif is_video:
-                                            from django.core.files.storage import default_storage
-                                            if default_storage.exists(f"drill_choices/videos/{os.path.basename(relative_path)}"):
-                                                video = f"drill_choices/videos/{os.path.basename(relative_path)}"
-                                            else:
-                                                video = relative_path
-                            
+                                # If no type or couldn't determine, try from URL extension
+                                if not (is_image or is_video):
+                                     parsed_url = urlparse(url)
+                                     path = parsed_url.path
+                                     ext = os.path.splitext(path)[1].lower()
+                                     is_image = ext in ['.jpg', '.jpeg', '.png', 'gif', '.webp']
+                                     is_video = ext in ['.mp4', '.webm', '.mov', '.avi']
+
+                                # Use the URL or path as the value for the image/video field
+                                if is_image:
+                                     image = url
+                                elif is_video:
+                                     video = url
+
+
+
+
+                            # Correctly handle the is_correct boolean based on the question's answer field
+                            # This assumes the question.answer field holds the correct index for M/F types
                             is_correct = False
-                            if 'is_correct' in choice_data:
-                                is_correct_val = choice_data.get('is_correct')
-                                if isinstance(is_correct_val, bool):
-                                    is_correct = is_correct_val
-                                elif isinstance(is_correct_val, str):
-                                    is_correct = is_correct_val.lower() == 'true'
-                            
+                            if question.answer is not None:
+                                 try:
+                                     # Convert question.answer to int for comparison with choice index
+                                     correct_index = int(question.answer)
+                                     is_correct = c_idx == correct_index
+                                 except (ValueError, TypeError):
+                                     # Handle cases where answer is not a valid integer (e.g., for Picture Word type, though this block is only for M/F)
+                                     pass
+
                             # Create choice
                             try:
-                                # Clean choice data
-                                choice_dict = {
+                                # Clean choice data (remove keys not in model)
+                                choice_dict_for_create = {
                                     'question': question,
                                     'text': choice_data.get('text', ''),
-                                    'is_correct': is_correct,
+                                    'is_correct': is_correct, # Use the correctly determined is_correct status
                                 }
-                                
-                                if image:
-                                    choice_dict['image'] = image
-                                if video:
-                                    choice_dict['video'] = video
-                                
+
+                                if image: # Add image only if it's not None/False
+                                    choice_dict_for_create['image'] = image
+                                if video: # Add video only if it's not None/False
+                                    choice_dict_for_create['video'] = video
+                                    
+                                # Ensure other incoming choice data fields are not included if not in model
+                                # For simplicity, we are only including 'text', 'is_correct', 'image', 'video'
+
                                 # Debug output
-                                print(f"Creating choice for question {question.id}: {choice_dict}")
-                                
-                                choice = DrillChoice.objects.create(**choice_dict)
+                                print(f"Creating choice for question {question.id}: {choice_dict_for_create}")
+
+                                choice = DrillChoice.objects.create(**choice_dict_for_create)
                                 print(f"Successfully created choice {choice.id}")
                             except Exception as e:
                                 print(f"Error creating choice: {str(e)}")
                                 import traceback
                                 print(traceback.format_exc())
                                 continue
-                        except Exception as e:
+                         except Exception as e:
                             print(f"Error processing choice: {e}")
                             continue
-            
+
             # Delete questions not in the update list
-            if questions_data:  # Only delete if we received questions data
+            # Check if questions_data is not empty before deleting
+            if questions_data:
                 questions_to_delete = set(existing_questions.keys()) - set(str(q_id) for q_id in questions_to_keep)
                 for q_id in questions_to_delete:
                     try:
+                        print(f"Deleting question with ID: {q_id}")
                         existing_questions[q_id].delete()
                     except Exception as e:
                         print(f"Error deleting question {q_id}: {e}")
-            
+
             return instance
         except Exception as e:
             print(f"Error in drill update: {e}")
+            # Re-raise the exception so it's not silenced
             raise
 
 class MemoryGameResultSerializer(serializers.ModelSerializer):
