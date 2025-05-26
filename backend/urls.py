@@ -7,7 +7,7 @@ from api.views import (
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
-    TransferRequestViewSet, NotificationViewSet, DrillResultListView, SubmitAnswerView
+    TransferRequestViewSet, NotificationViewSet, DrillResultListView, SubmitAnswerView, BadgeViewSet
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/classrooms/', ClassroomListView.as_view(), name='classroom_list'),
     path('api/classrooms/<int:pk>/', ClassroomDetailView.as_view(), name='classroom_detail'),
     path('api/classrooms/<int:pk>/students/', ClassroomStudentsView.as_view(), name='classroom_students'),
+    path('api/classrooms/<int:pk>/leaderboard/', ClassroomStudentsView.as_view(), name='classroom_leaderboard'),
     path('api/classrooms/join/', JoinClassroomView.as_view(), name='join_classroom'),
     path('api/classrooms/<int:pk>/import-students/', import_students_from_csv, name='import_students_from_csv'),
     
@@ -65,6 +66,14 @@ urlpatterns = [
 
     # Gen. AI URL
     path('api/gen-ai/', GenAIView.as_view(), name='gen-ai'),
+
+    # Badge URLs
+    path('api/badges/', BadgeViewSet.as_view({'get': 'list'}), name='badge_list'),
+    path('api/badges/<int:pk>/', BadgeViewSet.as_view({'get': 'retrieve'}), name='badge_detail'),
+    path('api/badges/student-badges/', BadgeViewSet.as_view({'get': 'student_badges'}), name='badge_student_badges'),
+    path('api/badges/statistics/', BadgeViewSet.as_view({'get': 'badge_statistics'}), name='badge_statistics'),
+    path('api/badges/points-statistics/', BadgeViewSet.as_view({'get': 'points_statistics'}), name='points_statistics'),
+    path('api/badges/all-student-points/', BadgeViewSet.as_view({'get': 'all_student_points'}), name='all_student_points'),
 ]
 
 # Serve media files in development

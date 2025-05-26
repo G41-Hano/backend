@@ -19,43 +19,49 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
 
     return token
 
+class BadgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Badge
+        fields = ['id', 'name', 'description', 'image', 'points_required', 'is_first_drill']
 
 class UserSerializer(serializers.ModelSerializer):
-  role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
-  role_input = serializers.ChoiceField(choices=Role.ROLE_CHOICES, write_only=True, required=True)
+    role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
+    role_input = serializers.ChoiceField(choices=Role.ROLE_CHOICES, write_only=True, required=True)
+    badges = BadgeSerializer(many=True, read_only=True)
+    total_points = serializers.IntegerField(read_only=True)
 
-  class Meta:
-    model = User
-    fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar"]
-    extra_kwargs = {"password": {"write_only": True},
+    class Meta:
+        model = User
+        fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar", "badges", "total_points"]
+        extra_kwargs = {"password": {"write_only": True},
                     "first_name_encrypted": {"read_only": True},
                     "last_name_encrypted": {"read_only": True},
                     }     # exclude this data when it is requested
 
-  def create(self, validated_data):
-    role_name = validated_data.pop("role_input")          # Extract role from data
-    user = User.objects.create_user(**validated_data)     # Create user object (password already hashed)
-    Role.objects.create(user=user, name=role_name)        # Create role object (to know if user is student or teacher)
-    return user
+    def create(self, validated_data):
+        role_name = validated_data.pop("role_input")          # Extract role from data
+        user = User.objects.create_user(**validated_data)     # Create user object (password already hashed)
+        Role.objects.create(user=user, name=role_name)        # Create role object (to know if user is student or teacher)
+        return user
   
-  def to_representation(self, instance):
-    """Decrypt first and last name for output"""
-    ret = super().to_representation(instance)
+    def to_representation(self, instance):
+        """Decrypt first and last name for output"""
+        ret = super().to_representation(instance)
 
-    # Decrypt first name using the model method
-    try:
-      ret['first_name'] = instance.get_decrypted_first_name()
-    except Exception as e:
-      ret['first_name'] = "ERROR NAME"
+        # Decrypt first name using the model method
+        try:
+            ret['first_name'] = instance.get_decrypted_first_name()
+        except Exception as e:
+            ret['first_name'] = "ERROR NAME"
     
     # Decrypt last name using the model method
-    try:
-      ret['last_name'] = instance.get_decrypted_last_name()
-    except Exception as e:
-      ret['last_name'] = "ERROR NAME"
+        try:
+            ret['last_name'] = instance.get_decrypted_last_name()
+        except Exception as e:
+            ret['last_name'] = "ERROR NAME"
 
-    return ret
-  
+        return ret
+
 class ResetPasswordRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
@@ -740,22 +746,24 @@ class QuestionResultSerializer(serializers.ModelSerializer):
 # Add serializer for DrillResult
 class DrillResultSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()
-    question_results = QuestionResultSerializer(many=True, read_only=True) # Nested serializer for question results
-    # We cannot include nested question-specific results easily with current models
-    # For Memory Game results, we could potentially add a nested serializer here
-    # memory_game_results = MemoryGameResultSerializer(many=True, read_only=True) # This would require a reverse relationship access
+    question_results = QuestionResultSerializer(many=True, read_only=True)
 
     class Meta:
         model = DrillResult
         fields = ['id', 'student', 'drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results']
-        read_only_fields = ['drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results'] # These are set by the system
+        read_only_fields = ['drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results']
 
     def get_student(self, obj):
         first_name = obj.student.get_decrypted_first_name() or ''
         last_name = obj.student.get_decrypted_last_name() or ''
+        request = self.context.get('request')
+        avatar_url = None
+        if obj.student.avatar:
+            avatar_url = request.build_absolute_uri(obj.student.avatar.url) if request else obj.student.avatar.url
         return {
             'id': obj.student.id,
             'username': obj.student.username,
             'name': f'{first_name} {last_name}'.strip(),
+            'avatar': avatar_url
         }
 

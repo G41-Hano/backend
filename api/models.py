@@ -7,33 +7,72 @@ from django.conf import settings
 
 # Create your models here.
 
+class Badge(models.Model):
+    id = models.AutoField(primary_key=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    image = models.ImageField(upload_to='badges/')
+    points_required = models.IntegerField(default=0)
+    is_first_drill = models.BooleanField(default=False)  # Special badge for first drill completion
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['points_required']
+
 class User(AbstractUser):
-  first_name_encrypted = models.BinaryField(null=True)
-  last_name_encrypted = models.BinaryField(null=True)
-  avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    first_name_encrypted = models.BinaryField(null=True)
+    last_name_encrypted = models.BinaryField(null=True)
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    badges = models.ManyToManyField(Badge, related_name='users', blank=True)
+    total_points = models.IntegerField(default=0)  # Track total points across all drills
 
-  def save(self, *args, **kwargs):
-    # encrypt first and last name before saving
-    if (self.first_name):
-      self.first_name_encrypted = encrypt(self.first_name)
-    if (self.last_name):
-      self.last_name_encrypted = encrypt(self.last_name)
-    
-    self.first_name = "***"
-    self.last_name = "***"
-    
-    super().save(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        # encrypt first and last name before saving
+        if (self.first_name):
+            self.first_name_encrypted = encrypt(self.first_name)
+        if (self.last_name):
+            self.last_name_encrypted = encrypt(self.last_name)
+        
+        self.first_name = "***"
+        self.last_name = "***"
+        
+        super().save(*args, **kwargs)
 
-  def get_decrypted_first_name(self):
-    if self.first_name_encrypted:
-      return decrypt(self.first_name_encrypted)
-    return None
+    def get_decrypted_first_name(self):
+        if self.first_name_encrypted:
+            return decrypt(self.first_name_encrypted)
+        return None
 
-  def get_decrypted_last_name(self):
-    if self.last_name_encrypted:
-      return decrypt(self.last_name_encrypted)
-    return None
+    def get_decrypted_last_name(self):
+        if self.last_name_encrypted:
+            return decrypt(self.last_name_encrypted)
+        return None
 
+    def update_points_and_badges(self, points_to_add):
+        """Update user's total points and check for new badges"""
+        self.total_points += points_to_add
+        self.save()
+        
+        # Check for point-based badges
+        point_badges = Badge.objects.filter(
+            points_required__lte=self.total_points,
+            is_first_drill=False
+        ).exclude(users=self)
+        
+        if point_badges.exists():
+            self.badges.add(*point_badges)
+            
+        return point_badges
+
+    def award_first_drill_badge(self):
+        """Award badge for completing first drill"""
+        first_drill_badge = Badge.objects.filter(is_first_drill=True).first()
+        if first_drill_badge and not self.badges.filter(is_first_drill=True).exists():
+            self.badges.add(first_drill_badge)
+            return first_drill_badge
+        return None
 
 class Role(models.Model):
   STUDENT = 'student'
@@ -163,13 +202,52 @@ class DrillChoice(models.Model):
   is_correct = models.BooleanField(default=False) # marks which of the DrillChoice objects is the correct answer option used for Multiple Choice ('M') and Fill in the Blank ('F') questions
 
 class DrillResult(models.Model):
-  id = models.AutoField(primary_key=True)
-  student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drill_results')
-  drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='drill_results')
-  run_number = models.IntegerField(4)
-  start_time = models.DateTimeField(auto_now_add=True)
-  completion_time = models.DateTimeField()
-  points = models.FloatField()
+    id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drill_results')
+    drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='drill_results')
+    run_number = models.IntegerField(4)
+    start_time = models.DateTimeField(auto_now_add=True)
+    completion_time = models.DateTimeField()
+    points = models.FloatField()
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        if is_new:  # Only process badges for new drill results
+            # Check if this is the student's first drill
+            if self.student.drill_results.count() == 1:
+                first_drill_badge = self.student.award_first_drill_badge()
+                if first_drill_badge:
+                    # Create notification for first drill badge
+                    Notification.objects.create(
+                        recipient=self.student,
+                        type='badge_earned',
+                        message=f"Congratulations! You've earned the {first_drill_badge.name} badge!",
+                        data={
+                            'badge_id': first_drill_badge.id,
+                            'badge_name': first_drill_badge.name,
+                            'badge_description': first_drill_badge.description,
+                            'badge_image': first_drill_badge.image.url if first_drill_badge.image else None
+                        }
+                    )
+            
+            # Update points and check for point-based badges
+            point_badges = self.student.update_points_and_badges(self.points)
+            
+            # Create notifications for any new point-based badges
+            for badge in point_badges:
+                Notification.objects.create(
+                    recipient=self.student,
+                    type='badge_earned',
+                    message=f"Congratulations! You've earned the {badge.name} badge!",
+                    data={
+                        'badge_id': badge.id,
+                        'badge_name': badge.name,
+                        'badge_description': badge.description,
+                        'badge_image': badge.image.url if badge.image else None
+                    }
+                )
 
 class MemoryGameResult(models.Model):
     id = models.AutoField(primary_key=True)
@@ -225,7 +303,8 @@ class Notification(models.Model):
         ('transfer_approved', 'Transfer Approved'),
         ('transfer_rejected', 'Transfer Rejected'),
         ('student_added', 'Student Added to Classroom'),
-        ('student_removed', 'Student Removed from Classroom')
+        ('student_removed', 'Student Removed from Classroom'),
+        ('badge_earned', 'Badge Earned')
     ]
     
     id = models.AutoField(primary_key=True)
