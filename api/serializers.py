@@ -126,7 +126,14 @@ class DrillChoiceSerializer(serializers.ModelSerializer):
 
 class DrillQuestionSerializer(serializers.ModelSerializer):
     choices = DrillChoiceSerializer(many=True, read_only=True)
+    # Fields for Blank Busters
+    pattern = serializers.CharField(required=False, allow_null=True)
+    hint = serializers.CharField(required=False, allow_null=True)
+    # Fields for Sentence Builder
+    sentence = serializers.CharField(required=False, allow_null=True)
     dragItems = serializers.JSONField(required=False)
+    incorrectChoices = serializers.JSONField(required=False)
+    # Other fields
     dropZones = serializers.JSONField(required=False)
     blankPosition = serializers.IntegerField(required=False, allow_null=True)
     memoryCards = serializers.JSONField(required=False)
@@ -138,10 +145,34 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'dragItems', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
+        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
 
     def validate(self, data):
-        if data.get('type') == 'G':  # Memory Game type
+        question_type = data.get('type')
+
+        if question_type == 'F':  # Blank Busters
+            if not data.get('pattern'):
+                raise serializers.ValidationError("Pattern is required for Blank Busters questions")
+            if not data.get('answer'):
+                raise serializers.ValidationError("Answer is required for Blank Busters questions")
+
+        elif question_type == 'D':  # Sentence Builder
+            if not data.get('sentence'):
+                raise serializers.ValidationError("Sentence is required for Sentence Builder questions")
+            if not data.get('dragItems'):
+                raise serializers.ValidationError("Drag items (correct answers) are required for Sentence Builder questions")
+            
+            # Validate sentence has blanks
+            if '_' not in data.get('sentence', ''):
+                raise serializers.ValidationError("Sentence must contain blanks marked with '_'")
+            
+            # Validate number of drag items matches number of blanks
+            blank_count = data['sentence'].count('_')
+            drag_items = data.get('dragItems', [])
+            if len(drag_items) != blank_count:
+                raise serializers.ValidationError(f"Number of drag items ({len(drag_items)}) must match number of blanks ({blank_count})")
+
+        elif data.get('type') == 'G':  # Memory Game type
             if not data.get('memoryCards'):
                 raise serializers.ValidationError("Memory cards are required for memory game questions")
             cards = data['memoryCards']
@@ -157,6 +188,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Each card must be an object")
                 if 'id' not in card or 'content' not in card or 'pairId' not in card:
                     raise serializers.ValidationError("Each card must have id, content, and pairId fields")
+
         elif data.get('type') == 'P':  # Picture Word type
             if not data.get('pictureWord'):
                 raise serializers.ValidationError("Pictures are required for Picture Word questions")
@@ -171,6 +203,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Each picture must be an object")
                 if 'id' not in pic:
                     raise serializers.ValidationError("Each picture must have an id field")
+
         return data
 
 class DrillSerializer(serializers.ModelSerializer):
