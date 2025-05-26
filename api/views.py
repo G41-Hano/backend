@@ -1086,24 +1086,28 @@ class DrillResultListView(generics.ListAPIView):
 
     def get_queryset(self):
         drill_id = self.kwargs['drill_id']
-        # Ensure the user requesting the results is the teacher who created the drill
-        # Or potentially allow students to see their own results
         user = self.request.user
         try:
             drill = Drill.objects.get(id=drill_id)
+            
+            # Check if user has permission to view results
             if user.role.name == 'teacher' and drill.created_by == user:
-                 # Teacher can see all results for their drill, prefetch question_results
+                # Teacher can see all results for their drill
                 return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
             elif user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
-                 # Student can only see their own result for a drill in their classroom, prefetch question_results
-                 return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
+                # Student can see all results for drills in their classroom
+                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
             else:
-                 # User is neither the teacher nor a student in the classroom
-                 from rest_framework.exceptions import PermissionDenied
-                 raise PermissionDenied("You do not have permission to view results for this drill.")
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("You do not have permission to view results for this drill.")
         except Drill.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound("Drill not found.")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
 # Add a view to submit answers for a single question
 class SubmitAnswerView(APIView):

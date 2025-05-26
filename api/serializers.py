@@ -746,22 +746,24 @@ class QuestionResultSerializer(serializers.ModelSerializer):
 # Add serializer for DrillResult
 class DrillResultSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()
-    question_results = QuestionResultSerializer(many=True, read_only=True) # Nested serializer for question results
-    # We cannot include nested question-specific results easily with current models
-    # For Memory Game results, we could potentially add a nested serializer here
-    # memory_game_results = MemoryGameResultSerializer(many=True, read_only=True) # This would require a reverse relationship access
+    question_results = QuestionResultSerializer(many=True, read_only=True)
 
     class Meta:
         model = DrillResult
         fields = ['id', 'student', 'drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results']
-        read_only_fields = ['drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results'] # These are set by the system
+        read_only_fields = ['drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results']
 
     def get_student(self, obj):
         first_name = obj.student.get_decrypted_first_name() or ''
         last_name = obj.student.get_decrypted_last_name() or ''
+        request = self.context.get('request')
+        avatar_url = None
+        if obj.student.avatar:
+            avatar_url = request.build_absolute_uri(obj.student.avatar.url) if request else obj.student.avatar.url
         return {
             'id': obj.student.id,
             'username': obj.student.username,
             'name': f'{first_name} {last_name}'.strip(),
+            'avatar': avatar_url
         }
 
