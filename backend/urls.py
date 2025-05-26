@@ -7,7 +7,7 @@ from api.views import (
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
-    TransferRequestViewSet, NotificationViewSet, DrillResultListView, SubmitAnswerView, BadgeViewSet
+    TransferRequestViewSet, NotificationViewSet, DrillResultListView, SubmitAnswerView, BadgeViewSet, upload_image, upload_video
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
@@ -74,6 +74,10 @@ urlpatterns = [
     path('api/badges/statistics/', BadgeViewSet.as_view({'get': 'badge_statistics'}), name='badge_statistics'),
     path('api/badges/points-statistics/', BadgeViewSet.as_view({'get': 'points_statistics'}), name='points_statistics'),
     path('api/badges/all-student-points/', BadgeViewSet.as_view({'get': 'all_student_points'}), name='all_student_points'),
+
+    # Upload Image and Video URLs
+    path('api/upload-image/', upload_image, name='upload_image'),
+    path('api/upload-video/', upload_video, name='upload_video'),
 ]
 
 # Serve media files in development

@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from .models import User, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult, Badge
+from .models import User, Role, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult, Badge
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -23,6 +23,8 @@ from cryptography.fernet import InvalidToken  # Import the InvalidToken exceptio
 from django.utils import timezone
 from django.db import models
 from django.db.models import Sum, Avg, Max
+import os
+import math
 
 # Create your views here.
 
@@ -591,6 +593,7 @@ class DrillListCreateView(generics.ListCreateAPIView):
             'classroom': data.get('classroom'),
             'status': data.get('status'),
             'questions_input': questions_input,
+            'custom_wordlist': data.get('custom_wordlist'),
         }
         serializer = self.get_serializer(data=serializer_data, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -1080,6 +1083,62 @@ class NotificationViewSet(viewsets.ModelViewSet):
         self.get_queryset().update(is_read=True)
         return Response({"status": "all marked as read"})
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_image(request):
+    if 'image' not in request.FILES:
+        return Response({'error': 'No image file provided'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    image_file = request.FILES['image']
+    
+    # Validate file type
+    if not image_file.content_type.startswith('image/'):
+        return Response({'error': 'Invalid file type. Only image files are allowed.'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    # Generate a unique filename
+    filename = f"vocabulary/images/{os.path.basename(image_file.name)}"
+    
+    try:
+        # Save the file
+        saved_path = default_storage.save(filename, image_file)
+        
+        # Get the URL of the saved file
+        file_url = request.build_absolute_uri(default_storage.url(saved_path))
+        
+        return Response({'url': file_url}, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_video(request):
+    if 'video' not in request.FILES:
+        return Response({'error': 'No video file provided'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    video_file = request.FILES['video']
+    
+    # Validate file type
+    if not video_file.content_type.startswith('video/'):
+        return Response({'error': 'Invalid file type. Only video files are allowed.'}, 
+                        status=status.HTTP_400_BAD_REQUEST)
+    
+    # Generate a unique filename
+    filename = f"vocabulary/videos/{os.path.basename(video_file.name)}"
+    
+    try:
+        # Save the file
+        saved_path = default_storage.save(filename, video_file)
+        
+        # Get the URL of the saved file
+        file_url = request.build_absolute_uri(default_storage.url(saved_path))
+        
+        return Response({'url': file_url}, status=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class DrillResultListView(generics.ListAPIView):
     serializer_class = DrillResultSerializer
     permission_classes = [IsAuthenticated]
@@ -1126,6 +1185,7 @@ class SubmitAnswerView(APIView):
 
             submitted_answer_data = request.data.get('answer')
             time_taken = request.data.get('time_taken') # Optional time taken for this question
+            wrong_attempts = request.data.get('wrong_attempts', 0) # Get wrong attempts from frontend
 
             if submitted_answer_data is None:
                  return Response({"error": "Answer data is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1152,18 +1212,11 @@ class SubmitAnswerView(APIView):
             # Determine if the answer is correct
             is_correct = self.check_answer(question, submitted_answer_data)
 
-            # Calculate points based on correctness
+            # Calculate points based on correctness and attempts
             points_to_award = 0
             if is_correct:
-                # Award points based on question type
-                if question.type in ['M', 'F']:  # Multiple Choice and Fill in the Blank
-                    points_to_award = 1  # 1 point for correct answer
-                elif question.type == 'D':  # Drag and Drop
-                    points_to_award = 2  # 2 points for correct answer
-                elif question.type == 'G':  # Memory Game
-                    points_to_award = 3  # 3 points for correct answer
-                elif question.type == 'P':  # Picture Word
-                    points_to_award = 1  # 1 point for correct answer
+                # Points: 100 - 20 per wrong attempt - 1 point per 5 seconds, minimum 30
+                points_to_award = max(30, 100 - wrong_attempts * 20 - math.floor(time_taken / 5))
 
             # Create or update the QuestionResult for this specific question
             question_result, created = QuestionResult.objects.update_or_create(
@@ -1181,6 +1234,10 @@ class SubmitAnswerView(APIView):
             # Update overall points on DrillResult
             drill_result.points += points_to_award
             drill_result.save()
+
+            # Update user's total points
+            user.total_points += points_to_award
+            user.save()
 
             # Get the best score for this drill
             best_score = DrillResult.objects.filter(
@@ -1253,29 +1310,30 @@ class SubmitAnswerView(APIView):
             return False
 
         elif question.type == 'G': # Memory Game
-             # Submitted answer is likely the list of matched pairs
-             # Correctness for memory game is usually based on completing all matches.
-             # The backend can verify if the submitted matches are all the correct pairs.
-             if isinstance(submitted_answer_data, list) and question.memoryCards:
-                 # Get all valid pairs from question.memoryCards
-                 valid_pairs = set()
-                 for card in question.memoryCards:
-                     if card.get('id') is not None and card.get('pairId') is not None:
-                          # Store pairs consistently, e.g., as a sorted tuple of string IDs
-                          pair = tuple(sorted([str(card['id']), str(card['pairId'])]))
-                          valid_pairs.add(pair)
+            # For memory game, we just need to check if all cards are matched
+            # The frontend sends an array of card IDs that are matched
+            if isinstance(submitted_answer_data, list) and question.memoryCards:
+                # Check if we have the correct number of matches
+                # Each pair should have 2 cards, so total matches should be half the number of cards
+                expected_matches = len(question.memoryCards) // 2
+                if len(submitted_answer_data) != expected_matches * 2:
+                    return False
+                
+                # Check if all cards are matched (no duplicates)
+                unique_cards = set(submitted_answer_data)
+                if len(unique_cards) != len(submitted_answer_data):
+                    return False
+                
+                # Check if all cards from memoryCards are included
+                memory_card_ids = set()
+                for card in question.memoryCards:
+                    if card.get('id'):
+                        memory_card_ids.add(str(card['id']))
+                
+                submitted_card_ids = set(submitted_answer_data)
+                return memory_card_ids == submitted_card_ids
 
-                 # Convert submitted matches to the same format
-                 submitted_pairs = set()
-                 for match in submitted_answer_data:
-                     if isinstance(match, list) and len(match) == 2:
-                          pair = tuple(sorted([str(match[0]), str(match[1])]))
-                          submitted_pairs.add(pair)
-
-                 # Check if submitted pairs match all valid pairs
-                 return submitted_pairs == valid_pairs and len(submitted_pairs) == len(valid_pairs)
-
-             return False
+            return False
 
         elif question.type == 'P': # Picture Word
             # Submitted answer is likely the text word entered by the student
