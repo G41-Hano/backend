@@ -30,4 +30,11 @@ class WordListView(viewsets.ModelViewSet):
 
   def get_queryset(self):
     user = self.request.user
-    return WordList.objects.filter(created_by=user)
+    if user.role.name == 'teacher':
+      return WordList.objects.filter(created_by=user)
+    else:
+      # Students can access wordlists from drills in their classrooms
+      return WordList.objects.filter(
+        drills__classroom__students=user,
+        drills__status='published'
+      ).distinct()
