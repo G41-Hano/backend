@@ -22,7 +22,7 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
 class BadgeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Badge
-        fields = ['id', 'name', 'description', 'image', 'points_required', 'is_first_drill']
+        fields = ['id', 'name', 'description', 'image', 'points_required', 'is_first_drill', 'drills_completed_required', 'correct_answers_required']
 
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source="role.name", read_only=True)  # Include role in response

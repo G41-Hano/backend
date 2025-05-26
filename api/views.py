@@ -1525,3 +1525,80 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
         if next_badge:
             return next_badge.points_required - current_points
         return 0
+
+    @action(detail=False, methods=['get'])
+    def earned_badges(self, request):
+        """
+        Get detailed information about earned badges.
+        For students: shows their earned badges with progress
+        For teachers: shows all badges with student earning statistics
+        """
+        user = request.user
+        
+        if user.role.name == 'teacher':
+            # Get all badges with earning statistics
+            badges = Badge.objects.all()
+            badge_data = []
+            
+            for badge in badges:
+                # Count how many students have earned this badge
+                earned_count = User.objects.filter(badges=badge).count()
+                total_students = User.objects.filter(role__name='student').count()
+                
+                badge_data.append({
+                    'id': badge.id,
+                    'name': badge.name,
+                    'description': badge.description,
+                    'image': request.build_absolute_uri(badge.image.url) if badge.image else None,
+                    'points_required': badge.points_required,
+                    'is_first_drill': badge.is_first_drill,
+                    'drills_completed_required': badge.drills_completed_required,
+                    'correct_answers_required': badge.correct_answers_required,
+                    'earned_count': earned_count,
+                    'total_students': total_students,
+                    'completion_rate': (earned_count / total_students * 100) if total_students > 0 else 0
+                })
+            
+            return Response(badge_data)
+        else:
+            # For students, show their earned badges with progress
+            earned_badges = user.badges.all()
+            all_badges = Badge.objects.all()
+            
+            # Create a set of earned badge IDs for quick lookup
+            earned_badge_ids = set(earned_badges.values_list('id', flat=True))
+            
+            badge_data = []
+            for badge in all_badges:
+                # Calculate progress for each badge
+                progress = None
+                if badge.points_required:
+                    progress = min(100, (user.total_points / badge.points_required * 100))
+                elif badge.drills_completed_required:
+                    completed_drills = DrillResult.objects.filter(student=user).count()
+                    progress = min(100, (completed_drills / badge.drills_completed_required * 100))
+                elif badge.correct_answers_required:
+                    correct_answers = QuestionResult.objects.filter(
+                        drill_result__student=user,
+                        is_correct=True
+                    ).count()
+                    progress = min(100, (correct_answers / badge.correct_answers_required * 100))
+                
+                badge_data.append({
+                    'id': badge.id,
+                    'name': badge.name,
+                    'description': badge.description,
+                    'image': request.build_absolute_uri(badge.image.url) if badge.image else None,
+                    'points_required': badge.points_required,
+                    'is_first_drill': badge.is_first_drill,
+                    'drills_completed_required': badge.drills_completed_required,
+                    'correct_answers_required': badge.correct_answers_required,
+                    'is_earned': badge.id in earned_badge_ids,
+                    'progress': progress,
+                    'earned_at': user.badges.through.objects.filter(
+                        user=user,
+                        badge=badge
+                    ).first().created_at if badge.id in earned_badge_ids else None
+                })
+            
+            return Response(badge_data)
