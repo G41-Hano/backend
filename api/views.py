@@ -131,6 +131,8 @@ class ResetPassword(generics.GenericAPIView):
         
         if user:
             user.set_password(request.data['new_password'])
+            user.first_name = decrypt(user.first_name_encrypted)
+            user.last_name = decrypt(user.last_name_encrypted)
             user.save()
             
             reset_obj.delete()
