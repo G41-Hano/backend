@@ -11,9 +11,11 @@ class Badge(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100)
     description = models.TextField()
-    image = models.ImageField(upload_to='badges/')
-    points_required = models.IntegerField(default=0)
+    image = models.ImageField(upload_to='badges/', null=True, blank=True)
+    points_required = models.IntegerField(null=True, blank=True)
     is_first_drill = models.BooleanField(default=False)  # Special badge for first drill completion
+    drills_completed_required = models.IntegerField(null=True, blank=True)
+    correct_answers_required = models.IntegerField(null=True, blank=True)
 
     def __str__(self):
         return self.name
