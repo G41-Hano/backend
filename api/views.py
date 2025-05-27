@@ -18,7 +18,7 @@ from django.core.files.storage import default_storage
 import pandas as pd
 from django.contrib.auth.hashers import make_password
 from rest_framework.decorators import api_view, permission_classes, action
-from api.utils.encryption import decrypt  # Import the decrypt function
+from api.utils.encryption import encrypt, decrypt  # Import the decrypt function
 from cryptography.fernet import InvalidToken  # Import the InvalidToken exception
 from django.utils import timezone
 from django.db import models
@@ -812,9 +812,11 @@ class ProfileView(APIView):
         if 'email' in request.data:
             user.email = request.data['email']
         if 'first_name' in request.data:
-            user.first_name = request.data['first_name']
+            user.first_name_encrypted = encrypt(request.data['first_name'])
+            user.first_name = "***"
         if 'last_name' in request.data:
-            user.last_name = request.data['last_name']
+            user.last_name_encrypted = encrypt(request.data['last_name'])
+            user.last_name = "***"
         if 'avatar' in request.data:
             user.avatar = request.data['avatar']
             

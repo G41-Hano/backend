@@ -32,10 +32,11 @@ class User(AbstractUser):
 
     def save(self, *args, **kwargs):
         # encrypt first and last name before saving
-        if (self.first_name):
-            self.first_name_encrypted = encrypt(self.first_name)
-        if (self.last_name):
-            self.last_name_encrypted = encrypt(self.last_name)
+        if self._state.adding: # checks if the instance is newly added
+          if (self.first_name):
+              self.first_name_encrypted = encrypt(self.first_name)
+          if (self.last_name):
+              self.last_name_encrypted = encrypt(self.last_name)
         
         self.first_name = "***"
         self.last_name = "***"
