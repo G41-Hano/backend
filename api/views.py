@@ -18,7 +18,7 @@ from django.core.files.storage import default_storage
 import pandas as pd
 from django.contrib.auth.hashers import make_password
 from rest_framework.decorators import api_view, permission_classes, action
-from api.utils.encryption import encrypt, decrypt  # Import the decrypt function
+from api.utils.encryption import decrypt  # Import the decrypt function
 from cryptography.fernet import InvalidToken  # Import the InvalidToken exception
 from django.utils import timezone
 from django.db import models
@@ -131,8 +131,6 @@ class ResetPassword(generics.GenericAPIView):
         
         if user:
             user.set_password(request.data['new_password'])
-            user.first_name = decrypt(user.first_name_encrypted)
-            user.last_name = decrypt(user.last_name_encrypted)
             user.save()
             
             reset_obj.delete()
@@ -760,10 +758,10 @@ class MemoryGameSubmissionView(APIView):
                 score=score
             )
             
-            # Update drill result points
-            drill_result.points = score
+            total_points_for_run = drill_result.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
+            drill_result.points = total_points_for_run
             drill_result.save()
-            
+
             return Response({
                 'success': True,
                 'score': score,
@@ -812,11 +810,9 @@ class ProfileView(APIView):
         if 'email' in request.data:
             user.email = request.data['email']
         if 'first_name' in request.data:
-            user.first_name_encrypted = encrypt(request.data['first_name'])
-            user.first_name = "***"
+            user.first_name = request.data['first_name']
         if 'last_name' in request.data:
-            user.last_name_encrypted = encrypt(request.data['last_name'])
-            user.last_name = "***"
+            user.last_name = request.data['last_name']
         if 'avatar' in request.data:
             user.avatar = request.data['avatar']
             
@@ -1152,14 +1148,14 @@ class DrillResultListView(generics.ListAPIView):
         user = self.request.user
         try:
             drill = Drill.objects.get(id=drill_id)
-            
+
             # Check if user has permission to view results
             if user.role.name == 'teacher' and drill.created_by == user:
                 # Teacher can see all results for their drill
                 return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
             elif user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
-                # Student can see all results for drills in their classroom
-                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
+                # Student can see only their own results for drills in their classroom
+                return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
             else:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("You do not have permission to view results for this drill.")
@@ -1235,8 +1231,10 @@ class SubmitAnswerView(APIView):
                 }
             )
 
-            # Update overall points on DrillResult
-            drill_result.points += points_to_award
+            # Update overall points on DrillResult by summing QuestionResult points
+            # Use aggregate to sum points_awarded from all question_results for this drill_result
+            total_points_for_run = drill_result.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
+            drill_result.points = total_points_for_run
             drill_result.save()
 
             # Update user's total points
