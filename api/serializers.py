@@ -22,9 +22,90 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
     return token
 
 class BadgeSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
+    is_earned = serializers.SerializerMethodField()
+    earned_at = serializers.SerializerMethodField()
+    requirement_type = serializers.SerializerMethodField()
+    requirement_value = serializers.SerializerMethodField()
+
     class Meta:
         model = Badge
-        fields = ['id', 'name', 'description', 'image', 'points_required', 'is_first_drill', 'drills_completed_required', 'correct_answers_required']
+        fields = [
+            'id', 'name', 'description', 'image', 'image_url',
+            'points_required', 'is_first_drill', 'drills_completed_required',
+            'correct_answers_required', 'progress', 'is_earned', 'earned_at',
+            'requirement_type', 'requirement_value'
+        ]
+
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.image and hasattr(obj.image, 'url'):
+            return request.build_absolute_uri(obj.image.url) if request else obj.image.url
+        return None
+
+    def get_progress(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+
+        user = request.user
+        if obj.points_required is not None:
+            return min(100, (user.total_points / obj.points_required * 100))
+        elif obj.drills_completed_required is not None:
+            completed_drills = DrillResult.objects.filter(student=user).count()
+            return min(100, (completed_drills / obj.drills_completed_required * 100))
+        elif obj.correct_answers_required is not None:
+            correct_answers = QuestionResult.objects.filter(
+                drill_result__student=user,
+                is_correct=True
+            ).count()
+            return min(100, (correct_answers / obj.correct_answers_required * 100))
+        elif obj.is_first_drill:
+            first_drill_result = DrillResult.objects.filter(student=user).order_by('start_time').first()
+            if first_drill_result:
+                return min(100, (first_drill_result.points / 100 * 100))  # Assuming 100 points required for first drill
+        return None
+
+    def get_is_earned(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.users.filter(id=request.user.id).exists()
+
+    def get_earned_at(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        try:
+            return obj.users.through.objects.filter(
+                user=request.user,
+                badge=obj
+            ).first().created_at
+        except:
+            return None
+
+    def get_requirement_type(self, obj):
+        if obj.is_first_drill:
+            return 'first_drill_points'
+        elif obj.points_required is not None:
+            return 'points'
+        elif obj.drills_completed_required is not None:
+            return 'drills_completed'
+        elif obj.correct_answers_required is not None:
+            return 'correct_answers'
+        return None
+
+    def get_requirement_value(self, obj):
+        if obj.is_first_drill:
+            return 100  # Points required for first drill
+        elif obj.points_required is not None:
+            return obj.points_required
+        elif obj.drills_completed_required is not None:
+            return obj.drills_completed_required
+        elif obj.correct_answers_required is not None:
+            return obj.correct_answers_required
+        return None
 
 class UserSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source="role.name", read_only=True)  # Include role in response

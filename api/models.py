@@ -55,26 +55,108 @@ class User(AbstractUser):
 
     def update_points_and_badges(self, points_to_add):
         """Update user's total points and check for new badges"""
-        self.total_points += points_to_add
-        self.save()
+        # Calculate total points from all drill results
+        total_points = DrillResult.objects.filter(
+            student=self
+        ).aggregate(
+            total=models.Sum('points')
+        )['total'] or 0
         
-        # Check for point-based badges
+        # Store previous points for badge comparison
+        previous_points = self.total_points
+        
+        # Update total points
+        self.total_points = total_points
+        self.save(update_fields=['total_points'])
+
+        # Get all badges that could be earned
+        new_badges = set()
+
+        # Check for point-based badges (including Pathfinder Prodigy)
         point_badges = Badge.objects.filter(
-            points_required__lte=self.total_points,
-            is_first_drill=False
-        ).exclude(users=self)
-        
-        if point_badges.exists():
-            self.badges.add(*point_badges)
-            
-        return point_badges
+            points_required__isnull=False,
+            is_first_drill=False,
+            drills_completed_required__isnull=True,
+            correct_answers_required__isnull=True
+        ).exclude(
+            id__in=self.badges.values_list('id', flat=True)  # Exclude already earned badges
+        )
+
+        for badge in point_badges:
+            # Special case for Pathfinder Prodigy badge
+            if badge.name == 'Pathfinder Prodigy':
+                if (previous_points < 100 and self.total_points >= 100 and self.total_points < 1000):
+                    new_badges.add(badge)
+            # For other point-based badges
+            elif previous_points < badge.points_required <= self.total_points:
+                new_badges.add(badge)
+
+        # Check for drill completion badges (like Vocabulary Rookie)
+        completed_drills = DrillResult.objects.filter(
+            student=self
+        ).values('drill').distinct().count()
+
+        drill_badges = Badge.objects.filter(
+            drills_completed_required__isnull=False,
+            is_first_drill=False,
+            points_required__isnull=True,
+            correct_answers_required__isnull=True
+        ).exclude(
+            id__in=self.badges.values_list('id', flat=True)
+        )
+
+        for badge in drill_badges:
+            if completed_drills >= badge.drills_completed_required:
+                new_badges.add(badge)
+
+        # Check for correct answers badges
+        total_correct = QuestionResult.objects.filter(
+            drill_result__student=self,
+            is_correct=True
+        ).count()
+
+        correct_badges = Badge.objects.filter(
+            correct_answers_required__isnull=False,
+            is_first_drill=False,
+            points_required__isnull=True,
+            drills_completed_required__isnull=True
+        ).exclude(
+            id__in=self.badges.values_list('id', flat=True)
+        )
+
+        for badge in correct_badges:
+            if total_correct >= badge.correct_answers_required:
+                new_badges.add(badge)
+
+        # Award all new badges
+        if new_badges:
+            self.badges.add(*new_badges)
+            # Create notifications for each new badge
+            for badge in new_badges:
+                Notification.objects.create(
+                    recipient=self,
+                    type='badge_earned',
+                    message=f'Congratulations! You earned the {badge.name} badge!',
+                    data={
+                        'badge_id': badge.id,
+                        'badge_name': badge.name,
+                        'badge_description': badge.description,
+                        'badge_image': badge.image.url if badge.image else None
+                    }
+                )
+
+        return new_badges
 
     def award_first_drill_badge(self):
-        """Award badge for completing first drill"""
+        """Award badge for completing first drill with required points"""
         first_drill_badge = Badge.objects.filter(is_first_drill=True).first()
         if first_drill_badge and not self.badges.filter(is_first_drill=True).exists():
-            self.badges.add(first_drill_badge)
-            return first_drill_badge
+            # Check if the student has earned the required points in their first drill
+            first_drill_result = DrillResult.objects.filter(student=self).order_by('start_time').first()
+            if first_drill_result and first_drill_badge.points_required is not None:
+                if first_drill_result.points >= first_drill_badge.points_required:
+                    self.badges.add(first_drill_badge)
+                    return first_drill_badge
         return None
 
 class Role(models.Model):
@@ -216,6 +298,8 @@ class DrillResult(models.Model):
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+        
+        # Save the drill result first
         super().save(*args, **kwargs)
         
         if is_new:  # Only process badges for new drill results
@@ -236,22 +320,8 @@ class DrillResult(models.Model):
                         }
                     )
             
-            # Update points and check for point-based badges
-            point_badges = self.student.update_points_and_badges(self.points)
-            
-            # Create notifications for any new point-based badges
-            for badge in point_badges:
-                Notification.objects.create(
-                    recipient=self.student,
-                    type='badge_earned',
-                    message=f"Congratulations! You've earned the {badge.name} badge!",
-                    data={
-                        'badge_id': badge.id,
-                        'badge_name': badge.name,
-                        'badge_description': badge.description,
-                        'badge_image': badge.image.url if badge.image else None
-                    }
-                )
+            # Update points and check for badges
+            self.student.update_points_and_badges(self.points)
 
 class MemoryGameResult(models.Model):
     id = models.AutoField(primary_key=True)

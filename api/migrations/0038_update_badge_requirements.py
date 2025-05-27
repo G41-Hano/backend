@@ -5,10 +5,10 @@ def update_badges(apps, schema_editor):
     updates = [
         {
             'name': 'Pathfinder Prodigy',
-            'description': 'You have earned 100 points on your First Drill!',
+            'description': 'Great! You have earned 100 points!',
             'image': 'badges/badge1.png',
             'points_required': 100,
-            'is_first_drill': True,
+            'is_first_drill': False,
             'drills_completed_required': None,
             'correct_answers_required': None,
         },
