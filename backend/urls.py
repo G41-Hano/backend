@@ -75,6 +75,7 @@ urlpatterns = [
     path('api/badges/statistics/', BadgeViewSet.as_view({'get': 'badge_statistics'}), name='badge_statistics'),
     path('api/badges/points-statistics/', BadgeViewSet.as_view({'get': 'points_statistics'}), name='points_statistics'),
     path('api/badges/all-student-points/', BadgeViewSet.as_view({'get': 'all_student_points'}), name='all_student_points'),
+    path('api/badges/drill-statistics/', BadgeViewSet.as_view({'get': 'drill_statistics'}), name='drill_statistics'),
 
     # Upload Image and Video URLs
     path('api/upload-image/', upload_image, name='upload_image'),

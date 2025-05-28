@@ -25,6 +25,7 @@ from django.db import models
 from django.db.models import Sum, Avg, Max
 import os
 import math
+import logging
 
 # Create your views here.
 
@@ -764,6 +765,9 @@ class MemoryGameSubmissionView(APIView):
             drill_result.points = score
             drill_result.save()
             
+            # Update user's total points and check for badges
+            request.user.update_points_and_badges(score)
+            
             return Response({
                 'success': True,
                 'score': score,
@@ -806,31 +810,89 @@ class ProfileView(APIView):
     
     def put(self, request):
         """Update the current user's profile information"""
-        user = request.user
+        logger = logging.getLogger(__name__)
         
-        # Update fields if provided
-        if 'email' in request.data:
-            user.email = request.data['email']
-        if 'first_name' in request.data:
-            user.first_name_encrypted = encrypt(request.data['first_name'])
-            user.first_name = "***"
-        if 'last_name' in request.data:
-            user.last_name_encrypted = encrypt(request.data['last_name'])
-            user.last_name = "***"
-        if 'avatar' in request.data:
-            user.avatar = request.data['avatar']
+        try:
+            user = request.user
+            logger.info(f"Current username before update: {user.username}")
             
-        user.save()
-        
-        return Response({
-            'id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'first_name': user.get_decrypted_first_name(),
-            'last_name': user.get_decrypted_last_name(),
-            'role': user.role.name,
-            'avatar': request.build_absolute_uri(user.avatar.url) if user.avatar else None
-        })
+            # Check if username is being changed
+            if 'username' in request.data:
+                new_username = request.data['username'].strip()
+                logger.info(f"Attempting to update username to: {new_username}")
+                
+                # Validate username is not empty
+                if not new_username:
+                    return Response(
+                        {"error": "Username cannot be empty"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Validate username length (between 3 and 30 characters)
+                if len(new_username) < 3 or len(new_username) > 30:
+                    return Response(
+                        {"error": "Username must be between 3 and 30 characters"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Validate username contains only allowed characters (letters, numbers, underscores, hyphens)
+                if not all(c.isalnum() or c in '_-' for c in new_username):
+                    return Response(
+                        {"error": "Username can only contain letters, numbers, underscores, and hyphens"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Check if username is already taken by another user
+                if User.objects.exclude(id=user.id).filter(username=new_username).exists():
+                    return Response(
+                        {"error": "Username is already taken"}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Direct database update
+                updated = User.objects.filter(id=user.id).update(username=new_username)
+                logger.info(f"Database update result: {updated}")
+                
+                # Force refresh from database
+                user = User.objects.get(id=user.id)
+                logger.info(f"Username after refresh: {user.username}")
+            
+            # Update other fields if provided
+            if 'email' in request.data:
+                user.email = request.data['email']
+            if 'first_name' in request.data:
+                user.first_name_encrypted = encrypt(request.data['first_name'])
+                user.first_name = "***"
+            if 'last_name' in request.data:
+                user.last_name_encrypted = encrypt(request.data['last_name'])
+                user.last_name = "***"
+            if 'avatar' in request.data:
+                user.avatar = request.data['avatar']
+            
+            # Save all changes
+            user.save()
+            logger.info(f"Final username after save: {user.username}")
+            
+            # One final refresh
+            user.refresh_from_db()
+            logger.info(f"Final username after final refresh: {user.username}")
+            
+            return Response({
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.get_decrypted_first_name(),
+                'last_name': user.get_decrypted_last_name(),
+                'role': user.role.name,
+                'avatar': request.build_absolute_uri(user.avatar.url) if user.avatar else None
+            })
+            
+        except Exception as e:
+            logger.error(f"Error updating profile: {str(e)}", exc_info=True)
+            return Response(
+                {"error": f"Error updating profile: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1255,9 +1317,8 @@ class SubmitAnswerView(APIView):
             drill_result.points += points_to_award
             drill_result.save()
 
-            # Update user's total points
-            user.total_points += points_to_award
-            user.save()
+            # Update user's total points and check for badges
+            user.update_points_and_badges(points_to_award)
 
             # Get the best score for this drill
             best_score = DrillResult.objects.filter(
@@ -1622,3 +1683,93 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
                 })
             
             return Response(badge_data)
+
+    @action(detail=False, methods=['get'])
+    def drill_statistics(self, request):
+        """
+        Get statistics about student's drill performance.
+        For students: shows their own statistics
+        For teachers: can view any student's statistics by providing student_id
+        """
+        try:
+            # Get the target student
+            student_id = request.query_params.get('student_id')
+            if student_id and request.user.role.name == 'teacher':
+                student = User.objects.get(id=student_id, role__name='student')
+            else:
+                student = request.user
+                if student.role.name != 'student':
+                    return Response(
+                        {"error": "Only students can view their own statistics"}, 
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
+            # Get total completed drills (unique drills attempted)
+            completed_drills = DrillResult.objects.filter(
+                student=student
+            ).values('drill').distinct().count()
+
+            # Get total correct answers
+            correct_answers = QuestionResult.objects.filter(
+                drill_result__student=student,
+                is_correct=True
+            ).count()
+
+            # Get total questions attempted
+            total_questions = QuestionResult.objects.filter(
+                drill_result__student=student
+            ).count()
+
+            # Calculate accuracy percentage
+            accuracy = (correct_answers / total_questions * 100) if total_questions > 0 else 0
+
+            # Get statistics by classroom
+            classroom_stats = []
+            for classroom in Classroom.objects.filter(students=student):
+                classroom_drills = DrillResult.objects.filter(
+                    student=student,
+                    drill__classroom=classroom
+                ).values('drill').distinct().count()
+
+                classroom_correct = QuestionResult.objects.filter(
+                    drill_result__student=student,
+                    drill_result__drill__classroom=classroom,
+                    is_correct=True
+                ).count()
+
+                classroom_total = QuestionResult.objects.filter(
+                    drill_result__student=student,
+                    drill_result__drill__classroom=classroom
+                ).count()
+
+                classroom_accuracy = (classroom_correct / classroom_total * 100) if classroom_total > 0 else 0
+
+                classroom_stats.append({
+                    'classroom_id': classroom.id,
+                    'classroom_name': classroom.name,
+                    'completed_drills': classroom_drills,
+                    'correct_answers': classroom_correct,
+                    'total_questions': classroom_total,
+                    'accuracy': classroom_accuracy
+                })
+
+            return Response({
+                'student_id': student.id,
+                'student_name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}",
+                'total_completed_drills': completed_drills,
+                'total_correct_answers': correct_answers,
+                'total_questions_attempted': total_questions,
+                'overall_accuracy': accuracy,
+                'classroom_statistics': classroom_stats
+            })
+
+        except User.DoesNotExist:
+            return Response(
+                {"error": "Student not found"}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Exception as e:
+            return Response(
+                {"error": f"Error retrieving drill statistics: {str(e)}"}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
