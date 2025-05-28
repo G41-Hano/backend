@@ -839,35 +839,51 @@ def import_students_from_csv(request, pk):
     df = pd.read_csv(csv_file)
     df.columns = df.columns.str.strip()  # Remove extra spaces in headers
     enrolled_user_ids = []
+    error_names = []    # names of users not found in the database
+    enrolled_names = [] # names of users successfully enrolled in the classroom
+
+    required_cols = {"First Name","Last Name"}
+    if not required_cols.issubset(df.columns):
+        return Response(
+            {"error": f"CSV file must contain the following columns: {', '.join(required_cols)}"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Preprocess all users: map (lowercased first + last name) to user instance
+    user_lookup = {
+        f"{(user.get_decrypted_first_name() or '').strip().lower()} {(user.get_decrypted_last_name() or '').strip().lower()}": user
+        for user in User.objects.all()
+    }
 
     for _, row in df.iterrows():
         first_name = str(row['First Name']).strip()
         last_name = str(row['Last Name']).strip()
-        
-        # Try to decrypt the first and last names
-        try:
-            decrypted_first_name = decrypt(first_name) if first_name else None
-            decrypted_last_name = decrypt(last_name) if last_name else None
-        except InvalidToken:
-            # If decryption fails, use the plain text values
-            decrypted_first_name = first_name
-            decrypted_last_name = last_name
-        
-        # Find existing user by decrypted first and last name (case-insensitive)
-        for user in User.objects.all():
-            if (user.get_decrypted_first_name() or '').strip().lower() == first_name.lower() and \
-               (user.get_decrypted_last_name() or '').strip().lower() == last_name.lower():
-                enrolled_user_ids.append(user.id)
-                print(f"Enrolling existing user: {user.username}")
-                break
+        full_name = f"{first_name.lower()} {last_name.lower()}"
+
+        user = user_lookup.get(full_name)
+        if user:
+            enrolled_user_ids.append(user.id)
+            enrolled_names.append(f"{last_name}, {first_name}")
+            print(f"Enrolling existing user: {user.username} - {first_name} {last_name}")
         else:
+            error_names.append(f"{last_name}, {first_name}")
             print(f"No user found for: {first_name} {last_name}. Skipping.")
 
-    classroom = Classroom.objects.get(pk=pk)
-    classroom.students.add(*enrolled_user_ids)
-    print("Enrolled students:", classroom.students.all())
+    if (len(enrolled_user_ids) == 0):
+        return Response({
+            "error": "Names in CSV does not exist.",
+            "not-enrolled": error_names
+        }, status=status.HTTP_404_NOT_FOUND)
+    else:
+        classroom = Classroom.objects.get(pk=pk)
+        classroom.students.add(*enrolled_user_ids)
+        # print("Enrolled students:", classroom.students.all())
 
-    return Response({"success": f"Enrolled {len(enrolled_user_ids)} students from CSV."})
+    return Response({
+            "message": f"Enrolled {len(enrolled_user_ids)} students from CSV.",
+            "enrolled": enrolled_names,
+            "not-enrolled": error_names
+        }, status=status.HTTP_202_ACCEPTED)
 
 class IsTeacher(permissions.BasePermission):
     def has_permission(self, request, view):
