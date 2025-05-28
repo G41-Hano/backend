@@ -129,6 +129,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     # Fields for Blank Busters
     pattern = serializers.CharField(required=False, allow_null=True)
     hint = serializers.CharField(required=False, allow_null=True)
+    letterChoices = serializers.JSONField(required=False)
     # Fields for Sentence Builder
     sentence = serializers.CharField(required=False, allow_null=True)
     dragItems = serializers.JSONField(required=False)
@@ -145,7 +146,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
+        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'letterChoices', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
 
     def validate(self, data):
         question_type = data.get('type')
