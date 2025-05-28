@@ -247,7 +247,6 @@ class Drill(models.Model):
   created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drills')
   classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='drills')
   custom_wordlist = models.ForeignKey('WordList', on_delete=models.SET_NULL, null=True, blank=True, related_name='drills', default=None)
-  
   STATUS_CHOICES = [
     ('draft', 'Draft'),
     ('published', 'Published'),
@@ -267,12 +266,20 @@ class DrillQuestion(models.Model):
   text = models.TextField(max_length=200)
   type = models.CharField(choices=TYPE, default='M', max_length=1)
   drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='questions')
-  dragItems = models.JSONField(default=list, blank=True, null=True)
+  # Fields for Blank Busters
+  pattern = models.CharField(max_length=200, blank=True, null=True)  # For storing the pattern with blanks
+  hint = models.TextField(blank=True, null=True)  # For storing hints
+  # Fields for Sentence Builder
+  sentence = models.TextField(blank=True, null=True)  # For storing the sentence with blanks
+  dragItems = models.JSONField(default=list, blank=True, null=True)  # For storing correct answers
+  incorrectChoices = models.JSONField(default=list, blank=True, null=True)  # For storing incorrect choices
+  # Other fields
   dropZones = models.JSONField(default=list, blank=True, null=True)
   blankPosition = models.IntegerField(blank=True, null=True)
-  memoryCards = models.JSONField(default=list, blank=True, null=True)  # New field for memory game cards
-  pictureWord = models.JSONField(default=list, blank=True, null=True)  # New field for picture word questions
+  memoryCards = models.JSONField(default=list, blank=True, null=True)  # For memory game cards
+  pictureWord = models.JSONField(default=list, blank=True, null=True)  # For picture word questions
   answer = models.TextField(max_length=200, blank=True, null=True)  # Add answer field
+  letterChoices = models.JSONField(null=True, blank=True)  # <-- add this line
 
   #fields for learning content drill
   story_title = models.CharField(max_length=100, blank=True, null=True)

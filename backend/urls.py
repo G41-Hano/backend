@@ -63,7 +63,6 @@ urlpatterns = [
     # Custom Word List URLs
     path('api/wordlist/', WordListView.as_view({'get':'list', 'post':'create'}), name='wordlist_list'),
     path('api/wordlist/<int:pk>/', WordListView.as_view({'get':'retrieve', 'put':'update', 'delete':'destroy'}), name='wordlist_detail'),
-
     # Gen. AI URL
     path('api/gen-ai/checklimit/', GenAICheckLimitView.as_view(), name='gen-ai-checklimit'),
     path('api/gen-ai/', GenAIView.as_view(), name='gen-ai'),
