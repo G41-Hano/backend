@@ -3,6 +3,8 @@ from .models import *
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .utils.encryption import encrypt, decrypt
 from collections import Counter
+from urllib.parse import urlparse
+import os
 
 # Serializers that convert the Django Object to JSON, and vice versa
 
@@ -19,43 +21,130 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
 
     return token
 
+class BadgeSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    progress = serializers.SerializerMethodField()
+    is_earned = serializers.SerializerMethodField()
+    earned_at = serializers.SerializerMethodField()
+    requirement_type = serializers.SerializerMethodField()
+    requirement_value = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Badge
+        fields = [
+            'id', 'name', 'description', 'image', 'image_url',
+            'points_required', 'is_first_drill', 'drills_completed_required',
+            'correct_answers_required', 'progress', 'is_earned', 'earned_at',
+            'requirement_type', 'requirement_value'
+        ]
+
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.image and hasattr(obj.image, 'url'):
+            return request.build_absolute_uri(obj.image.url) if request else obj.image.url
+        return None
+
+    def get_progress(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+
+        user = request.user
+        if obj.points_required is not None:
+            return min(100, (user.total_points / obj.points_required * 100))
+        elif obj.drills_completed_required is not None:
+            completed_drills = DrillResult.objects.filter(student=user).count()
+            return min(100, (completed_drills / obj.drills_completed_required * 100))
+        elif obj.correct_answers_required is not None:
+            correct_answers = QuestionResult.objects.filter(
+                drill_result__student=user,
+                is_correct=True
+            ).count()
+            return min(100, (correct_answers / obj.correct_answers_required * 100))
+        elif obj.is_first_drill:
+            first_drill_result = DrillResult.objects.filter(student=user).order_by('start_time').first()
+            if first_drill_result:
+                return min(100, (first_drill_result.points / 100 * 100))  # Assuming 100 points required for first drill
+        return None
+
+    def get_is_earned(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.users.filter(id=request.user.id).exists()
+
+    def get_earned_at(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return None
+        try:
+            return obj.users.through.objects.filter(
+                user=request.user,
+                badge=obj
+            ).first().created_at
+        except:
+            return None
+
+    def get_requirement_type(self, obj):
+        if obj.is_first_drill:
+            return 'first_drill_points'
+        elif obj.points_required is not None:
+            return 'points'
+        elif obj.drills_completed_required is not None:
+            return 'drills_completed'
+        elif obj.correct_answers_required is not None:
+            return 'correct_answers'
+        return None
+
+    def get_requirement_value(self, obj):
+        if obj.is_first_drill:
+            return 100  # Points required for first drill
+        elif obj.points_required is not None:
+            return obj.points_required
+        elif obj.drills_completed_required is not None:
+            return obj.drills_completed_required
+        elif obj.correct_answers_required is not None:
+            return obj.correct_answers_required
+        return None
 
 class UserSerializer(serializers.ModelSerializer):
-  role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
-  role_input = serializers.ChoiceField(choices=Role.ROLE_CHOICES, write_only=True, required=True)
+    role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
+    role_input = serializers.ChoiceField(choices=Role.ROLE_CHOICES, write_only=True, required=True)
+    badges = BadgeSerializer(many=True, read_only=True)
+    total_points = serializers.IntegerField(read_only=True)
 
-  class Meta:
-    model = User
-    fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar"]
-    extra_kwargs = {"password": {"write_only": True},
+    class Meta:
+        model = User
+        fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar", "badges", "total_points"]
+        extra_kwargs = {"password": {"write_only": True},
                     "first_name_encrypted": {"read_only": True},
                     "last_name_encrypted": {"read_only": True},
                     }     # exclude this data when it is requested
 
-  def create(self, validated_data):
-    role_name = validated_data.pop("role_input")          # Extract role from data
-    user = User.objects.create_user(**validated_data)     # Create user object (password already hashed)
-    Role.objects.create(user=user, name=role_name)        # Create role object (to know if user is student or teacher)
-    return user
+    def create(self, validated_data):
+        role_name = validated_data.pop("role_input")          # Extract role from data
+        user = User.objects.create_user(**validated_data)     # Create user object (password already hashed)
+        Role.objects.create(user=user, name=role_name)        # Create role object (to know if user is student or teacher)
+        return user
   
-  def to_representation(self, instance):
-    """Decrypt first and last name for output"""
-    ret = super().to_representation(instance)
+    def to_representation(self, instance):
+        """Decrypt first and last name for output"""
+        ret = super().to_representation(instance)
 
-    # Decrypt first name using the model method
-    try:
-      ret['first_name'] = instance.get_decrypted_first_name()
-    except Exception as e:
-      ret['first_name'] = "ERROR NAME"
+        # Decrypt first name using the model method
+        try:
+            ret['first_name'] = instance.get_decrypted_first_name()
+        except Exception as e:
+            ret['first_name'] = "ERROR NAME"
     
     # Decrypt last name using the model method
-    try:
-      ret['last_name'] = instance.get_decrypted_last_name()
-    except Exception as e:
-      ret['last_name'] = "ERROR NAME"
+        try:
+            ret['last_name'] = instance.get_decrypted_last_name()
+        except Exception as e:
+            ret['last_name'] = "ERROR NAME"
 
-    return ret
-  
+        return ret
+
 class ResetPasswordRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
@@ -217,7 +306,7 @@ class DrillSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Drill
-        fields = ['id', 'title', 'description', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id']
+        fields = ['id', 'title', 'description', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id', 'created_at']
 
     def get_questions(self, obj):
         return DrillQuestionSerializer(obj.questions.all(), many=True).data
@@ -247,7 +336,6 @@ class DrillSerializer(serializers.ModelSerializer):
         if custom_wordlist:
             drill.custom_wordlist = custom_wordlist
             drill.save()
-
         for q_idx, question_data in enumerate(questions_data):
             # Remove frontend-only fields not in the model
             for key in ['letterChoices']:
@@ -255,6 +343,11 @@ class DrillSerializer(serializers.ModelSerializer):
                     question_data.pop(key)
             
             choices_data = question_data.pop('choices', [])
+            # Store the answer field
+            answer = question_data.get('answer')
+            print(f"Creating question with answer: {answer}")  # Debug log
+
+            # Create the question with the answer field
             question = DrillQuestion.objects.create(drill=drill, **question_data)
             
             # Handle choices for multiple choice and fill in the blank
@@ -285,8 +378,6 @@ class DrillSerializer(serializers.ModelSerializer):
                         file = request.FILES[media_key]
                         if file.content_type.startswith('image/'):
                             card_data['media'] = {'url': f'/media/drill_choices/images/{file.name}', 'type': file.content_type}
-                        elif file.content_type.startswith('video/'):
-                            card_data['media'] = {'url': f'/media/drill_choices/videos/{file.name}', 'type': file.content_type}
                 question.memoryCards = memory_cards
                 question.save()
 
@@ -379,54 +470,86 @@ class DrillSerializer(serializers.ModelSerializer):
             questions_to_keep = []
             
             # Process each question in the input
-            for question_data in questions_data:
+            for q_idx, question_data in enumerate(questions_data):
                 # Handle string conversion if needed
                 if isinstance(question_data, str):
                     try:
                         import json
                         question_data = json.loads(question_data)
-                    except:
+                    except Exception as e:
+                        print(f"Error parsing question data JSON string: {e}")
                         continue
-                
+
                 if not isinstance(question_data, dict):
+                    print(f"Skipping invalid question data: {question_data}")
                     continue
-                
-                # Safe copy to avoid modifying the original
+
+                # Safe copy to avoid modifying the original and ensure 'answer' is present
                 question_dict = question_data.copy()
-                
+
                 # Extract question ID if present
                 question_id = None
                 if 'id' in question_dict:
                     try:
+                        # Ensure id is treated as string for consistent comparison
                         question_id = str(question_dict.pop('id'))
-                    except (TypeError, ValueError):
+                    except (TypeError, ValueError) as e:
+                        print(f"Error processing question ID: {e}")
                         question_id = None
-                
+
                 choices_data = []
                 if 'choices' in question_dict:
                     choices = question_dict.pop('choices')
                     if isinstance(choices, list):
                         choices_data = choices
+                    else:
+                         print(f"Warning: Expected choices to be a list, but got {type(choices)}")
+
+                # Fields that should *not* be directly set on the model from incoming data
+                # Remove fields that are not model fields or are handled separately (like choices_data)
+                fields_to_exclude_from_direct_set = ['created_at', 'updated_at', 'choices', 'dragItems', 'dropZones', 'memoryCards', 'pictureWord', 'id']
                 
-                # Remove fields that shouldn't be part of the model
-                for field in ['created_at', 'updated_at', 'answer']:
-                    if field in question_dict:
-                        question_dict.pop(field)
-                
+                # Ensure 'answer' is NOT in fields_to_exclude_from_direct_set
+                # The 'answer' field from question_dict should be set on the model
+
+
                 # Handle existing question update
                 question = None
                 if question_id and question_id in existing_questions:
                     question = existing_questions[question_id]
-                    # Update fields
-                    for attr, value in question_dict.items():
-                        setattr(question, attr, value)
-                    question.save()
-                    questions_to_keep.append(question.id)
                     
-                    # Delete existing choices for this question
-                    question.choices.all().delete()
+                    # Log question before update
+                    print(f"Updating existing question {question.id}. Before update: answer={question.answer}, text={question.text}, type={question.type}")
+                    print(f"Incoming question_dict for update: {question_dict}")
+
+                    # Update fields by iterating through incoming data
+                    # Explicitly set the answer field here
+                    if 'answer' in question_dict:
+                        question.answer = question_dict['answer']
+                        
+                    # Update other fields, excluding those we handle separately or shouldn't set directly
+                    for attr, value in question_dict.items():
+                         if attr not in fields_to_exclude_from_direct_set and hasattr(question, attr):
+                              setattr(question, attr, value)
+
+                    # Log question after setting attributes, before saving
+                    print(f"Question {question.id} after setting attributes (before save): answer={question.answer}, text={question.text}, type={question.type}")
+
+                    question.save()
+
+                    # Log question after saving
+                    print(f"Question {question.id} after save: answer={question.answer}, text={question.text}, type={question.type}")
+
+                    questions_to_keep.append(question.id)
+
+                    # Delete existing choices for this question before adding new ones (only for M and F)
+                    if question.type in ['M', 'F']:
+                         question.choices.all().delete()
+
                 else:
                     # Create new question
+                    # Use the incoming question_dict directly, which should include 'answer'
+                    print(f"Creating new question with dict: {question_dict}")
                     try:
                         # Remove frontend-only fields not in the model
                         for key in ['letterChoices']:
@@ -434,130 +557,140 @@ class DrillSerializer(serializers.ModelSerializer):
                                 question_dict.pop(key)
                         
                         question = DrillQuestion.objects.create(drill=instance, **question_dict)
+
+                        # Log newly created question
+                        print(f"Successfully created new question {question.id}: answer={question.answer}, text={question.text}, type={question.type}")
+
                         questions_to_keep.append(question.id)
                     except Exception as e:
                         print(f"Error creating question: {e}")
-                        continue
-                
-                # Add choices if we have a valid question
-                if question:
-                    for choice_data in choices_data:
-                        try:
+                        # Log the dict that failed to create
+                        print(f"Failed to create question with dict: {question_dict}")
+                        continue # Skip this question if creation fails
+
+                # Add choices if we have a valid question and it's M or F type
+                if question and question.type in ['M', 'F']:
+                    for c_idx, choice_data in enumerate(choices_data):
+                         try:
                             if isinstance(choice_data, str):
-                                import json
-                                choice_data = json.loads(choice_data)
-                            
+                                try:
+                                    import json
+                                    choice_data = json.loads(choice_data)
+                                except Exception as e:
+                                    print(f"Error parsing choice data JSON string: {e}")
+                                    continue # Skip this choice if parsing fails
+
                             if not isinstance(choice_data, dict):
+                                print(f"Skipping invalid choice data: {choice_data}")
                                 continue
-                                
+
                             # Handle media
                             media_key = None
-                            if 'media' in choice_data:
+                            # Only pop media if it's intended to be handled as a file upload key
+                            # Keep existing media data if it's an object with a URL
+                            if 'media' in choice_data and isinstance(choice_data['media'], str) and request and choice_data['media'] in request.FILES:
                                 media_key = choice_data.pop('media')
-                            
+
                             image = None
                             video = None
-                            
-                            # Handle new file uploads
+
+                            # Handle new file uploads referenced by media_key
                             if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
                                 file = request.FILES[media_key]
                                 if file.content_type.startswith('image/'):
                                     image = file
                                 elif file.content_type.startswith('video/'):
                                     video = file
-                            # Handle existing media
-                            elif media_key and isinstance(media_key, dict):
-                                # Check if the media has a URL
-                                if 'url' in media_key:
-                                    url = media_key['url']
-                                    # Extract filename from URL
-                                    import os
-                                    from urllib.parse import urlparse
+                            # Handle existing media if it's already a URL or file path string
+                            elif 'media' in choice_data and (isinstance(choice_data['media'], str) or (isinstance(choice_data['media'], dict) and 'url' in choice_data['media'])):
+                                # If it's a dict with a url, use the url
+                                media_value = choice_data['media']
+                                url = media_value['url'] if isinstance(media_value, dict) else media_value
+
+                                # Try to determine if it's an image or video from the URL or type
+                                is_image = False
+                                is_video = False
+
+                                # Check if type is provided in the original media_value dict
+                                if isinstance(media_value, dict) and 'type' in media_value and isinstance(media_value['type'], str):
+                                    is_image = media_value['type'].startswith('image/')
+                                    is_video = media_value['type'].startswith('video/')
                                     
-                                    # Try to determine if it's an image or video from the URL or type
-                                    is_image = False
-                                    is_video = False
-                                    
-                                    # Check if type is provided
-                                    media_type = media_key.get('type', '')
-                                    if isinstance(media_type, str):
-                                        is_image = media_type.startswith('image/')
-                                        is_video = media_type.startswith('video/')
-                                    
-                                    # If no type or couldn't determine, try from URL extension
-                                    if not (is_image or is_video):
-                                        parsed_url = urlparse(url)
-                                        path = parsed_url.path
-                                        ext = os.path.splitext(path)[1].lower()
-                                        is_image = ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']
-                                        is_video = ext in ['.mp4', '.webm', '.mov', '.avi']
-                                    
-                                    # extract the relative path from the URL
-                                    # Find the media path in the URL
-                                    if '/media/' in url:
-                                        relative_path = url.split('/media/')[1]
-                                        
-                                        if is_image:
-                                            from django.core.files.storage import default_storage
-                                            if default_storage.exists(f"drill_choices/images/{os.path.basename(relative_path)}"):
-                                                image = f"drill_choices/images/{os.path.basename(relative_path)}"
-                                            else:
-                                                image = relative_path
-                                        elif is_video:
-                                            from django.core.files.storage import default_storage
-                                            if default_storage.exists(f"drill_choices/videos/{os.path.basename(relative_path)}"):
-                                                video = f"drill_choices/videos/{os.path.basename(relative_path)}"
-                                            else:
-                                                video = relative_path
-                            
+                                # If no type or couldn't determine, try from URL extension
+                                if not (is_image or is_video):
+                                     parsed_url = urlparse(url)
+                                     path = parsed_url.path
+                                     ext = os.path.splitext(path)[1].lower()
+                                     is_image = ext in ['.jpg', '.jpeg', '.png', 'gif', '.webp']
+                                     is_video = ext in ['.mp4', '.webm', '.mov', '.avi']
+
+                                # Use the URL or path as the value for the image/video field
+                                if is_image:
+                                     image = url
+                                elif is_video:
+                                     video = url
+
+
+
+
+                            # Correctly handle the is_correct boolean based on the question's answer field
+                            # This assumes the question.answer field holds the correct index for M/F types
                             is_correct = False
-                            if 'is_correct' in choice_data:
-                                is_correct_val = choice_data.get('is_correct')
-                                if isinstance(is_correct_val, bool):
-                                    is_correct = is_correct_val
-                                elif isinstance(is_correct_val, str):
-                                    is_correct = is_correct_val.lower() == 'true'
-                            
+                            if question.answer is not None:
+                                 try:
+                                     # Convert question.answer to int for comparison with choice index
+                                     correct_index = int(question.answer)
+                                     is_correct = c_idx == correct_index
+                                 except (ValueError, TypeError):
+                                     # Handle cases where answer is not a valid integer (e.g., for Picture Word type, though this block is only for M/F)
+                                     pass
+
                             # Create choice
                             try:
-                                # Clean choice data
-                                choice_dict = {
+                                # Clean choice data (remove keys not in model)
+                                choice_dict_for_create = {
                                     'question': question,
                                     'text': choice_data.get('text', ''),
-                                    'is_correct': is_correct,
+                                    'is_correct': is_correct, # Use the correctly determined is_correct status
                                 }
-                                
-                                if image:
-                                    choice_dict['image'] = image
-                                if video:
-                                    choice_dict['video'] = video
-                                
+
+                                if image: # Add image only if it's not None/False
+                                    choice_dict_for_create['image'] = image
+                                if video: # Add video only if it's not None/False
+                                    choice_dict_for_create['video'] = video
+                                    
+                                # Ensure other incoming choice data fields are not included if not in model
+                                # For simplicity, we are only including 'text', 'is_correct', 'image', 'video'
+
                                 # Debug output
-                                print(f"Creating choice for question {question.id}: {choice_dict}")
-                                
-                                choice = DrillChoice.objects.create(**choice_dict)
+                                print(f"Creating choice for question {question.id}: {choice_dict_for_create}")
+
+                                choice = DrillChoice.objects.create(**choice_dict_for_create)
                                 print(f"Successfully created choice {choice.id}")
                             except Exception as e:
                                 print(f"Error creating choice: {str(e)}")
                                 import traceback
                                 print(traceback.format_exc())
                                 continue
-                        except Exception as e:
+                         except Exception as e:
                             print(f"Error processing choice: {e}")
                             continue
-            
+
             # Delete questions not in the update list
-            if questions_data:  # Only delete if we received questions data
+            # Check if questions_data is not empty before deleting
+            if questions_data:
                 questions_to_delete = set(existing_questions.keys()) - set(str(q_id) for q_id in questions_to_keep)
                 for q_id in questions_to_delete:
                     try:
+                        print(f"Deleting question with ID: {q_id}")
                         existing_questions[q_id].delete()
                     except Exception as e:
                         print(f"Error deleting question {q_id}: {e}")
-            
+
             return instance
         except Exception as e:
             print(f"Error in drill update: {e}")
+            # Re-raise the exception so it's not silenced
             raise
 
 class MemoryGameResultSerializer(serializers.ModelSerializer):
@@ -603,7 +736,7 @@ class TransferRequestSerializer(serializers.ModelSerializer):
         fields = ['id', 'student', 'student_name', 'from_classroom', 'from_classroom_name',
                  'to_classroom', 'to_classroom_name', 'requested_by', 'requested_by_name',
                  'status', 'created_at', 'updated_at', 'reason']
-        read_only_fields = ['status', 'created_at', 'updated_at']
+        read_only_fields = ['status', 'created_at', 'updated_at', 'requested_by']
 
     def get_student_name(self, obj):
         return f"{obj.student.get_decrypted_first_name()} {obj.student.get_decrypted_last_name()}"
@@ -635,14 +768,28 @@ class TransferRequestSerializer(serializers.ModelSerializer):
         if from_classroom.id == to_classroom.id:
             raise serializers.ValidationError("Source and target classrooms must be different")
 
+        # Check for existing pending transfer request
+        if TransferRequest.objects.filter(
+            student=student,
+            from_classroom=from_classroom,
+            to_classroom=to_classroom,
+            status='pending'
+        ).exists():
+            raise serializers.ValidationError("A pending transfer request already exists for this student and classrooms")
+
         return data
+
+class PromptSerializer(serializers.Serializer):
+    prompt = serializers.CharField(max_length=5000) # Adjust max_length as needed
+    system_message = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+    temperature = serializers.FloatField(required=False, default=0.7)
+    max_tokens = serializers.IntegerField(required=False, default=500)
 
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'type', 'message', 'data', 'is_read', 'created_at']
-        read_only_fields = ['created_at']
-
+        read_only_fields = ['created_at', 'type', 'message', 'data']
 
 class VocabularySerializer(serializers.ModelSerializer):
     class Meta:
@@ -749,3 +896,40 @@ class WordListSerializer(serializers.ModelSerializer):
                 word.delete()
 
         return instance
+
+# Add serializer for QuestionResult
+class QuestionResultSerializer(serializers.ModelSerializer):
+    # You might want to include some question details here for easier frontend display
+    question_id = serializers.PrimaryKeyRelatedField(source='question.id', read_only=True)
+    question_text = serializers.CharField(source='question.text', read_only=True)
+    question_type = serializers.CharField(source='question.type', read_only=True)
+
+    class Meta:
+        model = QuestionResult
+        fields = ['id', 'question_id', 'question_text', 'question_type', 'submitted_answer', 'is_correct', 'time_taken', 'submitted_at', 'points_awarded']
+        read_only_fields = ['id', 'question_id', 'question_text', 'question_type', 'submitted_at'] # These are set by the backend
+
+# Add serializer for DrillResult
+class DrillResultSerializer(serializers.ModelSerializer):
+    student = serializers.SerializerMethodField()
+    question_results = QuestionResultSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = DrillResult
+        fields = ['id', 'student', 'drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results']
+        read_only_fields = ['drill', 'run_number', 'start_time', 'completion_time', 'points', 'question_results']
+
+    def get_student(self, obj):
+        first_name = obj.student.get_decrypted_first_name() or ''
+        last_name = obj.student.get_decrypted_last_name() or ''
+        request = self.context.get('request')
+        avatar_url = None
+        if obj.student.avatar:
+            avatar_url = request.build_absolute_uri(obj.student.avatar.url) if request else obj.student.avatar.url
+        return {
+            'id': obj.student.id,
+            'username': obj.student.username,
+            'name': f'{first_name} {last_name}'.strip(),
+            'avatar': avatar_url
+        }
+

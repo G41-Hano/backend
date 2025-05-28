@@ -49,6 +49,9 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL')  # Sender email
 # KEY for ENCRYPTING/DECRYPTING data
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY").encode()
 
+# KEY for using Gen. AI (through OpenRouter)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
