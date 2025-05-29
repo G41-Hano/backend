@@ -298,23 +298,24 @@ class DrillResult(models.Model):
     id = models.AutoField(primary_key=True)
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drill_results')
     drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='drill_results')
-    run_number = models.IntegerField(4)
+    run_number = models.IntegerField(4) # how many times the student has taken the drill
     start_time = models.DateTimeField(auto_now_add=True)
     completion_time = models.DateTimeField()
     points = models.FloatField()
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
-        
-        # Save the drill result first
         super().save(*args, **kwargs)
-        
+        # After saving, always sum all related QuestionResult points_awarded for this run
+        total_points = self.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
+        if self.points != total_points:
+            self.points = total_points
+            super().save(update_fields=['points'])
         if is_new:  # Only process badges for new drill results
             # Check if this is the student's first drill
             if self.student.drill_results.count() == 1:
                 first_drill_badge = self.student.award_first_drill_badge()
                 if first_drill_badge:
-                    # Create notification for first drill badge
                     Notification.objects.create(
                         recipient=self.student,
                         type='badge_earned',
@@ -326,7 +327,6 @@ class DrillResult(models.Model):
                             'badge_image': first_drill_badge.image.url if first_drill_badge.image else None
                         }
                     )
-            
             # Update points and check for badges
             self.student.update_points_and_badges(self.points)
 

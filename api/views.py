@@ -1294,11 +1294,8 @@ class SubmitAnswerView(APIView):
             # Determine if the answer is correct
             is_correct = self.check_answer(question, submitted_answer_data)
 
-            # Calculate points based on correctness and attempts
-            points_to_award = 0
-            if is_correct:
-                # Points: 100 - 20 per wrong attempt - 1 point per 5 seconds, minimum 30
-                points_to_award = max(30, 100 - wrong_attempts * 20 - math.floor(time_taken / 5))
+            # Get points from frontend
+            points_to_award = request.data.get('points', 0)
 
             # Create or update the QuestionResult for this specific question
             question_result, created = QuestionResult.objects.update_or_create(
