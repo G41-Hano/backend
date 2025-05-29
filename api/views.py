@@ -1290,7 +1290,7 @@ class SubmitAnswerView(APIView):
                     'run_number': 1,
                     'start_time': timezone.now(),
                     'completion_time': timezone.now(),
-                    'points': 0
+                    # 'points': 0
                 }
             )
 
@@ -1298,8 +1298,11 @@ class SubmitAnswerView(APIView):
             if not created:
                 drill_result.run_number += 1
                 drill_result.completion_time = timezone.now()
-                drill_result.points = 0  # Reset points for new attempt
-                drill_result.save()
+                drill_result.points = 0.0  # Reset points for new attempt
+                drill_result.save(update_fields=['run_number', 'completion_time', '_points_encrypted'])
+            else:
+                drill_result.points = 0.0
+                drill_result.save(update_fields=['_points_encrypted'])
 
             # Determine if the answer is correct
             is_correct = self.check_answer(question, submitted_answer_data)
@@ -1322,7 +1325,7 @@ class SubmitAnswerView(APIView):
 
             # Update overall points on DrillResult
             drill_result.points += points_to_award
-            drill_result.save()
+            drill_result.save(update_fields=['_points_encrypted'])
 
             # Update user's total points and check for badges
             user.update_points_and_badges(points_to_award)

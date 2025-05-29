@@ -56,11 +56,11 @@ class User(AbstractUser):
     def update_points_and_badges(self, points_to_add):
         """Update user's total points and check for new badges"""
         # Calculate total points from all drill results
-        total_points = DrillResult.objects.filter(
-            student=self
-        ).aggregate(
-            total=models.Sum('points')
-        )['total'] or 0
+        total_points = 0
+        drill_results = DrillResult.objects.filter(student=self)
+        for result in drill_results:
+            if result.points is not None:
+                total_points += result.points
         
         # Store previous points for badge comparison
         previous_points = self.total_points
