@@ -377,7 +377,17 @@ class DrillSerializer(serializers.ModelSerializer):
                     if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
                         file = request.FILES[media_key]
                         if file.content_type.startswith('image/'):
-                            card_data['media'] = {'url': f'/media/drill_choices/images/{file.name}', 'type': file.content_type}
+                            try:
+                                from django.core.files.storage import default_storage
+                                file_path = f'drill_choices/images/{file.name}'
+                                saved_path = default_storage.save(file_path, file)
+                                card_data['media'] = {
+                                    'url': request.build_absolute_uri(default_storage.url(saved_path)),
+                                    'type': file.content_type
+                                }
+                            except Exception as e:
+                                print(f"Error saving memory game image: {e}")
+                                card_data['media'] = None
                 question.memoryCards = memory_cards
                 question.save()
 
