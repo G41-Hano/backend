@@ -301,7 +301,6 @@ class DrillResult(models.Model):
     run_number = models.IntegerField(4) # how many times the student has taken the drill
     start_time = models.DateTimeField(auto_now_add=True)
     completion_time = models.DateTimeField()
-    points = models.FloatField()
 
     # New field to store the encrypted points
     _points_encrypted = models.BinaryField(null=True, blank=True) 

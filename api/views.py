@@ -1328,10 +1328,17 @@ class SubmitAnswerView(APIView):
             user.update_points_and_badges(points_to_award)
 
             # Get the best score for this drill
-            best_score = DrillResult.objects.filter(
+            best_score = 0
+            drill_results_for_max = DrillResult.objects.filter(
                 student=user,
                 drill=drill
-            ).aggregate(best_score=models.Max('points'))['best_score'] or 0
+            ) #.aggregate(best_score=models.Max('points'))['best_score'] or 0
+            decrypted_points = [result.points for result in drill_results_for_max if result.points is not None]
+            if decrypted_points:
+                best_score = max(decrypted_points)
+            else:
+                best_score = 0
+
 
             return Response({
                 'success': True,
@@ -1530,57 +1537,67 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
             if request.user.role.name == 'teacher':
                 # Teachers can see all students
                 students = User.objects.filter(role__name='student')
-                student_points = []
+                student_points_data = []
                 for student in students:
                     # Calculate total points from all drills across all classrooms
-                    total_points = DrillResult.objects.filter(
-                        student=student
-                    ).aggregate(total=Sum('points'))['total'] or 0
+
+
+                    # This fetches the _points_encrypted binary field from the DB
+                    student_drill_results = DrillResult.objects.filter(student=student)
+
+                    total_points = sum(result.points for result in student_drill_results if result.points is not None)
                     
                     # Get points breakdown by classroom
-                    classroom_points = []
+                    classroom_points_data  = []
                     for classroom in Classroom.objects.filter(students=student):
-                        classroom_total = DrillResult.objects.filter(
+                        classroom_drill_results  = DrillResult.objects.filter(
                             student=student,
                             drill__classroom=classroom
-                        ).aggregate(total=Sum('points'))['total'] or 0
+                        )
+                        # Calculate classroom total
+                        classroom_total = sum(result.points for result in classroom_drill_results if result.points is not None)
                         
-                        classroom_points.append({
+                        
+                        classroom_points_data.append({
                             'classroom_id': classroom.id,
                             'classroom_name': classroom.name,
                             'points': classroom_total
                         })
                     
-                    student_points.append({
+                    student_points_data.append({
                         'id': student.id,
                         'first_name': student.get_decrypted_first_name(),
                         'last_name': student.get_decrypted_last_name(),
                         'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None,
                         'total_points': total_points,
-                        'classroom_points': classroom_points,
+                        'classroom_points': classroom_points_data,
                         'badges_count': student.badges.count()
                     })
                 
                 # Sort by total points in descending order
-                student_points.sort(key=lambda x: x['total_points'], reverse=True)
-                return Response(student_points)
+                student_points_data.sort(key=lambda x: x['total_points'], reverse=True)
+                return Response(student_points_data)
             else:
                 # Students can only see themselves
                 student = request.user
-                # Calculate total points from all drills across all classrooms
-                total_points = DrillResult.objects.filter(
-                    student=student
-                ).aggregate(total=Sum('points'))['total'] or 0
+
+                student_drill_results = DrillResult.objects.filter(student=student)
+                
+                # Calculate total points
+                total_points = sum(result.points for result in student_drill_results if result.points is not None)
+                
                 
                 # Get points breakdown by classroom
-                classroom_points = []
+                classroom_points_data = []
                 for classroom in Classroom.objects.filter(students=student):
-                    classroom_total = DrillResult.objects.filter(
+                    classroom_drill_results = DrillResult.objects.filter(
                         student=student,
                         drill__classroom=classroom
-                    ).aggregate(total=Sum('points'))['total'] or 0
+                    )
+                    # Calculate classroom total in Python
+                    classroom_total = sum(result.points for result in classroom_drill_results if result.points is not None)
                     
-                    classroom_points.append({
+                    classroom_points_data.append({
                         'classroom_id': classroom.id,
                         'classroom_name': classroom.name,
                         'points': classroom_total
@@ -1592,7 +1609,7 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
                     'last_name': student.get_decrypted_last_name(),
                     'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None,
                     'total_points': total_points,
-                    'classroom_points': classroom_points,
+                    'classroom_points': classroom_points_data,
                     'badges_count': student.badges.count()
                 })
             
