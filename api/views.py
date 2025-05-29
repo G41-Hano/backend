@@ -916,6 +916,12 @@ def import_students_from_csv(request, pk):
         f"{(user.get_decrypted_first_name() or '').strip().lower()} {(user.get_decrypted_last_name() or '').strip().lower()}": user
         for user in User.objects.all()
     }
+    classroom = Classroom.objects.get(pk=pk)
+    classroom_student_lookup = {
+        f"{(student.get_decrypted_first_name() or '').strip().lower()} {(student.get_decrypted_last_name() or '').strip().lower()}": student
+        for student in classroom.students.all()
+    }
+
 
     for _, row in df.iterrows():
         first_name = str(row['First Name']).strip()
@@ -924,6 +930,11 @@ def import_students_from_csv(request, pk):
 
         user = user_lookup.get(full_name)
         if user:
+            if classroom_student_lookup.get(full_name):
+                error_names.append(f"{last_name}, {first_name}")
+                print(f"User already enrolled in classroom: {user.username} - {first_name} {last_name}")
+                continue
+
             enrolled_user_ids.append(user.id)
             enrolled_names.append(f"{last_name}, {first_name}")
             print(f"Enrolling existing user: {user.username} - {first_name} {last_name}")
@@ -937,7 +948,6 @@ def import_students_from_csv(request, pk):
             "not-enrolled": error_names
         }, status=status.HTTP_404_NOT_FOUND)
     else:
-        classroom = Classroom.objects.get(pk=pk)
         classroom.students.add(*enrolled_user_ids)
         # print("Enrolled students:", classroom.students.all())
 
