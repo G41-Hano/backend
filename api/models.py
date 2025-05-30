@@ -56,11 +56,11 @@ class User(AbstractUser):
     def update_points_and_badges(self, points_to_add):
         """Update user's total points and check for new badges"""
         # Calculate total points from all drill results
-        total_points = DrillResult.objects.filter(
-            student=self
-        ).aggregate(
-            total=models.Sum('points')
-        )['total'] or 0
+        total_points = 0
+        drill_results = DrillResult.objects.filter(student=self)
+        for result in drill_results:
+            if result.points is not None:
+                total_points += result.points
         
         # Store previous points for badge comparison
         previous_points = self.total_points
@@ -286,6 +286,9 @@ class DrillQuestion(models.Model):
   story_context = models.TextField(blank=True, null=True)
   sign_language_instructions = models.TextField(blank=True, null=True)
 
+  word = models.CharField(max_length=255, blank=True, null=True)
+  definition = models.TextField(blank=True, null=True)
+
 class DrillChoice(models.Model):
   id = models.AutoField(primary_key=True)
   question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='choices')
@@ -301,16 +304,54 @@ class DrillResult(models.Model):
     run_number = models.IntegerField(4) # how many times the student has taken the drill
     start_time = models.DateTimeField(auto_now_add=True)
     completion_time = models.DateTimeField()
-    points = models.FloatField()
+
+    # New field to store the encrypted points
+    _points_encrypted = models.BinaryField(null=True, blank=True) 
+
+    # A temporary variable to hold the decrypted value for setting
+    _points_decrypted_cache = None
+
+    @property
+    def points(self):
+        """
+        Returns the decrypted points value.
+        """
+        if self._points_decrypted_cache is not None:
+            return self._points_decrypted_cache
+        elif self._points_encrypted:
+            try:
+                self._points_decrypted_cache = float(decrypt(self._points_encrypted))
+                return self._points_decrypted_cache
+            except Exception as e:
+                print(f"Error decrypting points for DrillResult {self.id}: {e}")
+                return None
+        return None
+    
+    @points.setter
+    def points(self, value):
+        """
+        Sets the points value and encrypts it.
+        """
+        if value is not None:
+            try:
+                value = float(value)
+            except (ValueError, TypeError):
+                raise ValueError("Points must be a number.")
+            
+            self._points_decrypted_cache = value
+            self._points_encrypted = encrypt(str(value))
+        else:
+            self._points_decrypted_cache = None
+            self._points_encrypted = None
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         super().save(*args, **kwargs)
         # After saving, always sum all related QuestionResult points_awarded for this run
         total_points = self.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
-        if self.points != total_points:
+        if self.points is None or self.points != total_points:
             self.points = total_points
-            super().save(update_fields=['points'])
+            super().save(update_fields=['_points_encrypted'])
         if is_new:  # Only process badges for new drill results
             # Check if this is the student's first drill
             if self.student.drill_results.count() == 1:
@@ -329,6 +370,16 @@ class DrillResult(models.Model):
                     )
             # Update points and check for badges
             self.student.update_points_and_badges(self.points)
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # On initialization, if _points_encrypted exists, decrypt it to the cache
+        if self._points_encrypted:
+            try:
+                self._points_decrypted_cache = float(decrypt(self._points_encrypted))
+            except Exception as e:
+                print(f"Error during __init__ decryption for DrillResult {self.id}: {e}")
+                self._points_decrypted_cache = None
 
 class MemoryGameResult(models.Model):
     id = models.AutoField(primary_key=True)
