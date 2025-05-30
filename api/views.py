@@ -762,11 +762,13 @@ class MemoryGameSubmissionView(APIView):
             )
             
             # Update drill result points
-            drill_result.points = score
+          #  drill_result.points = score
+            total_points_for_run = drill_result.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
+            drill_result.points = total_points_for_run
             drill_result.save()
             
             # Update user's total points and check for badges
-            request.user.update_points_and_badges(score)
+            request.user.update_points_and_badges(total_points_for_run)
             
             return Response({
                 'success': True,
@@ -1247,7 +1249,8 @@ class DrillResultListView(generics.ListAPIView):
                 return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
             elif user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
                 # Student can see all results for drills in their classroom
-                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
+               # return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
+                return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
             else:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("You do not have permission to view results for this drill.")
@@ -1324,11 +1327,13 @@ class SubmitAnswerView(APIView):
             )
 
             # Update overall points on DrillResult
-            drill_result.points += points_to_award
+            #drill_result.points += points_to_award
+            total_points_for_run = drill_result.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
+            drill_result.points = total_points_for_run
             drill_result.save(update_fields=['_points_encrypted'])
 
             # Update user's total points and check for badges
-            user.update_points_and_badges(points_to_award)
+            user.update_points_and_badges(total_points_for_run)
 
             # Get the best score for this drill
             best_score = 0

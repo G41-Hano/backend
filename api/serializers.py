@@ -493,6 +493,7 @@ class DrillSerializer(serializers.ModelSerializer):
                             except Exception as e:
                                 print(f"Error saving memory game image: {e}")
                                 card_data['media'] = None
+
                 question.memoryCards = memory_cards
                 question.save()
 
