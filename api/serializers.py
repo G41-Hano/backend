@@ -215,6 +215,7 @@ class DrillChoiceSerializer(serializers.ModelSerializer):
 
 class DrillQuestionSerializer(serializers.ModelSerializer):
     choices = DrillChoiceSerializer(many=True, read_only=True)
+    # Add other fields similar to DrillDrillQuestionSerializer
     pattern = serializers.CharField(required=False, allow_null=True)
     hint = serializers.CharField(required=False, allow_null=True)
     letterChoices = serializers.JSONField(required=False)
@@ -230,6 +231,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     sign_language_instructions = serializers.CharField(required=False, allow_null=True)
     answer = serializers.CharField(required=False, allow_null=True)
     
+    # Add word and definition fields
     word = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     definition = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
@@ -295,7 +297,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Each picture must have an id field")
 
         return data
-    
+
     def get_word(self, obj):
         # If the word is already set, use it
         if hasattr(obj, 'word') and obj.word:
@@ -615,7 +617,6 @@ class DrillSerializer(serializers.ModelSerializer):
                 # Ensure 'answer' is NOT in fields_to_exclude_from_direct_set
                 # The 'answer' field from question_dict should be set on the model
 
-
                 # Handle existing question update
                 question = None
                 if question_id and question_id in existing_questions:
@@ -637,6 +638,11 @@ class DrillSerializer(serializers.ModelSerializer):
 
                     # Log question after setting attributes, before saving
                     print(f"Question {question.id} after setting attributes (before save): answer={question.answer}, text={question.text}, type={question.type}")
+
+                    if 'word' in question_dict:
+                        question.word = question_dict['word']
+                    if 'definition' in question_dict:
+                        question.definition = question_dict['definition']
 
                     question.save()
 
