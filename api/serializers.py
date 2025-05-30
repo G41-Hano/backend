@@ -215,15 +215,12 @@ class DrillChoiceSerializer(serializers.ModelSerializer):
 
 class DrillQuestionSerializer(serializers.ModelSerializer):
     choices = DrillChoiceSerializer(many=True, read_only=True)
-    # Fields for Blank Busters
     pattern = serializers.CharField(required=False, allow_null=True)
     hint = serializers.CharField(required=False, allow_null=True)
     letterChoices = serializers.JSONField(required=False)
-    # Fields for Sentence Builder
     sentence = serializers.CharField(required=False, allow_null=True)
     dragItems = serializers.JSONField(required=False)
     incorrectChoices = serializers.JSONField(required=False)
-    # Other fields
     dropZones = serializers.JSONField(required=False)
     blankPosition = serializers.IntegerField(required=False, allow_null=True)
     memoryCards = serializers.JSONField(required=False)
@@ -232,10 +229,13 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     story_context = serializers.CharField(required=False, allow_null=True)
     sign_language_instructions = serializers.CharField(required=False, allow_null=True)
     answer = serializers.CharField(required=False, allow_null=True)
+    
+    word = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    definition = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'letterChoices', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer']
+        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'letterChoices', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer', 'word', 'definition']
 
     def validate(self, data):
         question_type = data.get('type')
@@ -295,6 +295,44 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError("Each picture must have an id field")
 
         return data
+    
+    def get_word(self, obj):
+        # If the word is already set, use it
+        if hasattr(obj, 'word') and obj.word:
+            return obj.word
+        # If the drill is associated with a custom wordlist, find the word
+        if hasattr(obj, 'drill') and obj.drill and obj.drill.custom_wordlist:
+            words = obj.drill.custom_wordlist.words.all()
+            matching_words = words.filter(word__icontains=obj.answer or obj.text)
+            return matching_words.first().word if matching_words.exists() else None
+        
+        # For built-in wordlists, try to find the word
+        if hasattr(obj.drill, 'wordlistName'):
+            from .models import Vocabulary
+            builtin_words = Vocabulary.objects.filter(list__name=obj.drill.wordlistName)
+            matching_words = builtin_words.filter(word__icontains=obj.answer or obj.text)
+            return matching_words.first().word if matching_words.exists() else None
+        
+        return None
+
+    def get_definition(self, obj):
+        # If the definition is already set, use it
+        if hasattr(obj, 'definition') and obj.definition:
+            return obj.definition
+        # If the drill is associated with a custom wordlist, find the definition
+        if hasattr(obj, 'drill') and obj.drill and obj.drill.custom_wordlist:
+            words = obj.drill.custom_wordlist.words.all()
+            matching_words = words.filter(word__icontains=obj.answer or obj.text)
+            return matching_words.first().definition if matching_words.exists() else None
+        
+        # For built-in wordlists, try to find the definition
+        if hasattr(obj.drill, 'wordlistName'):
+            from .models import Vocabulary
+            builtin_words = Vocabulary.objects.filter(list__name=obj.drill.wordlistName)
+            matching_words = builtin_words.filter(word__icontains=obj.answer or obj.text)
+            return matching_words.first().definition if matching_words.exists() else None
+        
+        return None
 
 class DrillSerializer(serializers.ModelSerializer):
     questions = serializers.SerializerMethodField()
@@ -309,18 +347,83 @@ class DrillSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'description', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id', 'created_at']
 
     def get_questions(self, obj):
-        return DrillQuestionSerializer(obj.questions.all(), many=True).data
+        # Fetch questions with their related data
+        questions = obj.questions.all()
+        
+        # If it's a custom wordlist, we need to fetch the words
+        if obj.custom_wordlist:
+            words = obj.custom_wordlist.words.all()
+            
+            # Modify questions to include word and definition
+            modified_questions = []
+            for question in questions:
+                # Try to find a matching word based on the question's text or answer
+                matching_words = words.filter(word__icontains=question.answer or question.text)
+                
+                # If a matching word is found, add its details to the question
+                modified_question = DrillQuestionSerializer(question).data
+
+                # If the original question object has 'word' and 'definition', use them
+                if hasattr(question, 'word') and question.word:
+                    modified_question['word'] = question.word
+                if hasattr(question, 'definition') and question.definition:
+                    modified_question['definition'] = question.definition
+
+                # Fallback to matching logic if not present
+                if not modified_question.get('word') or not modified_question.get('definition'):
+                    if matching_words.exists():
+                        matching_word = matching_words.first()
+                        modified_question['word'] = matching_word.word
+                        modified_question['definition'] = matching_word.definition
+
+                modified_questions.append(modified_question)
+            
+            return modified_questions
+        
+        # If it's a built-in wordlist, fetch the words
+        if hasattr(self, 'wordlistName') and self.wordlistName:
+            from .models import Vocabulary
+            builtin_words = Vocabulary.objects.filter(list__name=self.wordlistName)
+            
+            # Modify questions to include word and definition
+            modified_questions = []
+            for question in questions:
+                # Try to find a matching word based on the question's text or answer
+                matching_words = builtin_words.filter(word__icontains=question.answer or question.text)
+                
+                # If a matching word is found, add its details to the question
+                modified_question = DrillQuestionSerializer(question).data
+
+                # If the original question object has 'word' and 'definition', use them
+                if hasattr(question, 'word') and question.word:
+                    modified_question['word'] = question.word
+                if hasattr(question, 'definition') and question.definition:
+                    modified_question['definition'] = question.definition
+
+                # Fallback to matching logic if not present
+                if not modified_question.get('word') or not modified_question.get('definition'):
+                    if matching_words.exists():
+                        matching_word = matching_words.first()
+                        modified_question['word'] = matching_word.word
+                        modified_question['definition'] = matching_word.definition
+
+                modified_questions.append(modified_question)
+            
+            return modified_questions
+        
+        # If no wordlist is associated, return questions as-is
+        return DrillQuestionSerializer(questions, many=True).data
 
     def get_wordlist_name(self, obj):
         if obj.custom_wordlist:
             return obj.custom_wordlist.name
-        # Optionally, handle builtin wordlist if you have that field
+
         return None
 
     def get_wordlist_id(self, obj):
         if obj.custom_wordlist:
             return obj.custom_wordlist.id
-        # Optionally, handle builtin wordlist if you have that field
+     
         return None
 
     def create(self, validated_data):
