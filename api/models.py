@@ -286,6 +286,9 @@ class DrillQuestion(models.Model):
   story_context = models.TextField(blank=True, null=True)
   sign_language_instructions = models.TextField(blank=True, null=True)
 
+  word = models.CharField(max_length=255, blank=True, null=True)
+  definition = models.TextField(blank=True, null=True)
+
 class DrillChoice(models.Model):
   id = models.AutoField(primary_key=True)
   question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='choices')
