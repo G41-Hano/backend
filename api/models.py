@@ -24,6 +24,7 @@ class Badge(models.Model):
         ordering = ['points_required']
 
 class User(AbstractUser):
+    email = models.EmailField(unique=True)  
     first_name_encrypted = models.BinaryField(null=True)
     last_name_encrypted = models.BinaryField(null=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
@@ -263,31 +264,32 @@ class DrillQuestion(models.Model):
   ]
 
   id = models.AutoField(primary_key=True)
+  drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='questions')
   text = models.TextField(max_length=200)
   type = models.CharField(choices=TYPE, default='M', max_length=1)
-  drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='questions')
+  answer = models.TextField(max_length=200, blank=True, null=True)  
+  letterChoices = models.JSONField(null=True, blank=True)  
+  word = models.CharField(max_length=255, blank=True, null=True)
+  definition = models.TextField(blank=True, null=True)
+  
   # Fields for Blank Busters
   pattern = models.CharField(max_length=200, blank=True, null=True)  # For storing the pattern with blanks
   hint = models.TextField(blank=True, null=True)  # For storing hints
+
   # Fields for Sentence Builder
   sentence = models.TextField(blank=True, null=True)  # For storing the sentence with blanks
   dragItems = models.JSONField(default=list, blank=True, null=True)  # For storing correct answers
   incorrectChoices = models.JSONField(default=list, blank=True, null=True)  # For storing incorrect choices
+  
+  # Fields for Picture Word
+  pictureWord = models.JSONField(default=list, blank=True, null=True)  
+
+  # Fields for Memory Game
+  memoryCards = models.JSONField(default=list, blank=True, null=True) 
+
   # Other fields
   dropZones = models.JSONField(default=list, blank=True, null=True)
   blankPosition = models.IntegerField(blank=True, null=True)
-  memoryCards = models.JSONField(default=list, blank=True, null=True)  # For memory game cards
-  pictureWord = models.JSONField(default=list, blank=True, null=True)  # For picture word questions
-  answer = models.TextField(max_length=200, blank=True, null=True)  # Add answer field
-  letterChoices = models.JSONField(null=True, blank=True)  # <-- add this line
-
-  #fields for learning content drill
-  story_title = models.CharField(max_length=100, blank=True, null=True)
-  story_context = models.TextField(blank=True, null=True)
-  sign_language_instructions = models.TextField(blank=True, null=True)
-
-  word = models.CharField(max_length=255, blank=True, null=True)
-  definition = models.TextField(blank=True, null=True)
 
 class DrillChoice(models.Model):
   id = models.AutoField(primary_key=True)
@@ -403,7 +405,6 @@ class QuestionResult(models.Model):
     class Meta:
         unique_together = ('drill_result', 'question'); # Ensure a student only has one result per question per drill run
 
-#Transfer Request
 class TransferRequest(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -426,8 +427,6 @@ class TransferRequest(models.Model):
 
     class Meta:
         ordering = ['-created_at']
-
-#Notification
 
 class Notification(models.Model):
     TYPE_CHOICES = [

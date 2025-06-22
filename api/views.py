@@ -63,6 +63,20 @@ class CheckUsernameView(APIView):
             'message': 'Username already exists' if exists else 'Username is available'
         })
 
+class CheckEmailView(APIView):
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return Response({'error': 'Email is required'}, status=400)
+            
+        exists = User.objects.filter(email=email).exists()
+        return Response({
+            'exists': exists,
+            'message': 'This email address is already taken' if exists else 'This email address is available'
+        })
+
 # class UserView(APIView):
 #   permission_classes = [IsAuthenticated]
 #   def get(self, request):
