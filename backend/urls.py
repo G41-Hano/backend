@@ -3,7 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from api.views import (
-    CreateUserView, UserListView, CheckUsernameView, CustomTokenView,
+    CreateUserView, UserListView, CheckUsernameView, CheckEmailView, CustomTokenView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/userlist/", UserListView.as_view(), name="users"),
     path("api/user/register/", CreateUserView.as_view(), name="register"),
     path("api/user/check-username/", CheckUsernameView.as_view(), name="check_username"),
+    path("api/user/check-email/", CheckEmailView.as_view(), name="check_email"),
     path("api/token/", CustomTokenView.as_view(), name="get_token"),
     path("api/token/refresh", TokenRefreshView.as_view(), name="refresh"),
     path("api-auth/", include("rest_framework.urls")),

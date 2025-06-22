@@ -226,9 +226,6 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     blankPosition = serializers.IntegerField(required=False, allow_null=True)
     memoryCards = serializers.JSONField(required=False)
     pictureWord = serializers.JSONField(required=False)
-    story_title = serializers.CharField(required=False, allow_null=True)
-    story_context = serializers.CharField(required=False, allow_null=True)
-    sign_language_instructions = serializers.CharField(required=False, allow_null=True)
     answer = serializers.CharField(required=False, allow_null=True)
     
     # Add word and definition fields
@@ -237,7 +234,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DrillQuestion
-        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'letterChoices', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'story_title', 'story_context', 'sign_language_instructions', 'answer', 'word', 'definition']
+        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'letterChoices', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'answer', 'word', 'definition']
 
     def validate(self, data):
         question_type = data.get('type')
@@ -844,7 +841,6 @@ class MemoryGameResultSerializer(serializers.ModelSerializer):
         
         return data
     
-
 class TransferRequestSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
     from_classroom_name = serializers.SerializerMethodField()
@@ -1017,7 +1013,6 @@ class WordListSerializer(serializers.ModelSerializer):
 
         return instance
 
-# Add serializer for QuestionResult
 class QuestionResultSerializer(serializers.ModelSerializer):
     # You might want to include some question details here for easier frontend display
     question_id = serializers.PrimaryKeyRelatedField(source='question.id', read_only=True)
@@ -1029,7 +1024,6 @@ class QuestionResultSerializer(serializers.ModelSerializer):
         fields = ['id', 'question_id', 'question_text', 'question_type', 'submitted_answer', 'is_correct', 'time_taken', 'submitted_at', 'points_awarded']
         read_only_fields = ['id', 'question_id', 'question_text', 'question_type', 'submitted_at'] # These are set by the backend
 
-# Add serializer for DrillResult
 class DrillResultSerializer(serializers.ModelSerializer):
     student = serializers.SerializerMethodField()
     question_results = QuestionResultSerializer(many=True, read_only=True)
