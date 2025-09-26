@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from .models import User, Role, PasswordReset, Classroom, Drill, DrillQuestion, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult, Badge
+from .models import User, Role, PasswordReset, Classroom, Drill, DrillQuestionBase, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult, Badge, SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -26,13 +26,14 @@ from django.db.models import Sum, Avg, Max
 import os
 import math
 import logging
+from django.contrib.contenttypes.models import ContentType
 
 # Create your views here.
 
 class CustomTokenView(TokenObtainPairView):
   serializer_class = CustomTokenSerializer
 
-class CreateUserView(generics.CreateAPIView):
+class CreateUserView(generics.CreateAPIView): # Generic class-based view
   queryset = User.objects.all()
   serializer_class = UserSerializer
   permission_classes = [AllowAny]
@@ -730,7 +731,7 @@ class MemoryGameSubmissionView(APIView):
         try:
             # Get the drill and question
             drill = Drill.objects.get(id=drill_id)
-            question = DrillQuestion.objects.get(id=question_id, drill=drill)
+            question = DrillQuestionBase.objects.get(id=question_id, drill=drill)
             
             if question.type != 'G':
                 return Response(
@@ -754,16 +755,10 @@ class MemoryGameSubmissionView(APIView):
                 drill_result.completion_time = timezone.now()
                 drill_result.save()
             
-            # Calculate score based on attempts and time
+            # Calculate score by delegating to model's compute_score
             attempts = request.data.get('attempts', 0)
-            time_taken = request.data.get('time_taken', 0)
             matches = request.data.get('matches', [])
-            
-            # Score calculation
-            base_score = 100
-            attempt_penalty = attempts * 5  # 5 points penalty per attempt
-            time_penalty = time_taken * 0.1  # 0.1 points penalty per second
-            score = max(0, base_score - attempt_penalty - time_penalty)
+            score = question.compute_score(matches, meta={'attempts': attempts})
             
             # Create memory game result
             memory_result = MemoryGameResult.objects.create(
@@ -771,7 +766,6 @@ class MemoryGameSubmissionView(APIView):
                 question=question,
                 attempts=attempts,
                 matches=matches,
-                time_taken=time_taken,
                 score=score
             )
             
@@ -788,7 +782,6 @@ class MemoryGameSubmissionView(APIView):
                 'success': True,
                 'score': score,
                 'attempts': attempts,
-                'time_taken': time_taken
             })
             
         except Drill.DoesNotExist:
@@ -796,7 +789,7 @@ class MemoryGameSubmissionView(APIView):
                 {"error": "Drill not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        except DrillQuestion.DoesNotExist:
+        except DrillQuestionBase.DoesNotExist:
             return Response(
                 {"error": "Question not found"},
                 status=status.HTTP_404_NOT_FOUND
@@ -1281,12 +1274,39 @@ class DrillResultListView(generics.ListAPIView):
 class SubmitAnswerView(APIView):
     permission_classes = [IsAuthenticated]
 
+    QUESTION_MODEL_MAP = {
+        'M': SmartSelectQuestion,
+        'F': BlankBustersQuestion,
+        'D': SentenceBuilderQuestion,
+        'P': PictureWordQuestion,
+        'G': MemoryGameQuestion,
+    }
+
     def post(self, request, drill_id, question_id):
         try:
             user = request.user
             drill = Drill.objects.get(id=drill_id)
-            question = DrillQuestion.objects.get(id=question_id, drill=drill)
 
+            question_instance = None
+            question_model_type = None
+            
+            # Iterate through all concrete question models to find the question
+            for q_type_code, model_cls in self.QUESTION_MODEL_MAP.items():
+                try:
+                    # Attempt to get the question from this specific model
+                    q = model_cls.objects.get(id=question_id, drill=drill)
+                    question_instance = q
+                    question_model_type = q_type_code
+                    break # Found the question, stop searching
+                except model_cls.DoesNotExist:
+                    continue # Not found in this model, try the next one
+
+            if not question_instance:
+                # If after checking all, it's still not found
+                return Response({"error": "Question not found in this drill or invalid question ID."}, status=status.HTTP_404_NOT_FOUND)
+
+            question = question_instance
+            
             # Ensure student is enrolled in the classroom to submit answers
             if user.role.name != 'student' or not drill.classroom.students.filter(id=user.id).exists():
                  from rest_framework.exceptions import PermissionDenied
@@ -1322,16 +1342,28 @@ class SubmitAnswerView(APIView):
                 drill_result.save(update_fields=['_points_encrypted'])
 
             # Determine if the answer is correct
-            is_correct = self.check_answer(question, submitted_answer_data)
+            is_correct = question.check_answer(submitted_answer_data)
 
-            # Get points from frontend
-            points_to_award = request.data.get('points', 0)
+            # Compute points on the server by delegating to model's compute_score
+            points_to_award = 0.0
+            if question.type == 'G': # Memory Game has specific scoring logic
+                attempts_for_memory = request.data.get('attempts', 0) # This is likely total 'clicks' or 'turns'
+                computed = question.compute_score(submitted_answer_data, meta={'attempts': attempts_for_memory})
+                points_to_award = float(computed) if is_correct else 0.0
+            else: # All other question types
+                wrong_attempts_for_other = request.data.get('wrong_attempts', 0) # This is number of incorrect submissions for the question
+                computed = question.compute_score(submitted_answer_data, meta={'wrong_attempts': wrong_attempts_for_other})
+                points_to_award = float(computed) if is_correct else 0.0
 
-            # Create or update the QuestionResult for this specific question
+            # Create or update the QuestionResult for this specific question (generic link)
+            ct = ContentType.objects.get_for_model(question) # Get content type of the concrete question
             question_result, created = QuestionResult.objects.update_or_create(
                 drill_result=drill_result,
-                question=question,
+                content_type=ct,
+                object_id=question.id,
                 defaults={
+                    # REMOVE: 'question': getattr(question, 'base_ptr', None) if hasattr(question, 'base_ptr') else None,
+                    # You no longer need the legacy FK after migration
                     'submitted_answer': submitted_answer_data,
                     'is_correct': is_correct,
                     'time_taken': time_taken,
@@ -1375,15 +1407,13 @@ class SubmitAnswerView(APIView):
 
         except Drill.DoesNotExist:
             return Response({"error": "Drill not found"}, status=status.HTTP_404_NOT_FOUND)
-        except DrillQuestion.DoesNotExist:
-            return Response({"error": "Question not found in this drill"}, status=status.HTTP_404_NOT_FOUND)
         except PermissionDenied as e:
             return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
         except Exception as e:
             import traceback
             print(f"SubmitAnswerView Error: {e}\n{traceback.format_exc()}")
             return Response({"error": str(e), "traceback": traceback.format_exc()}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
+            
     def check_answer(self, question, submitted_answer_data):
         """Helper method to check if the submitted answer is correct."""
         if question.type == 'M': # Multiple Choice

@@ -233,7 +233,7 @@ class DrillQuestionSerializer(serializers.ModelSerializer):
     definition = serializers.CharField(required=False, allow_blank=True, allow_null=True)
 
     class Meta:
-        model = DrillQuestion
+        model = DrillQuestionBase
         fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'letterChoices', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'answer', 'word', 'definition']
 
     def validate(self, data):
@@ -346,72 +346,79 @@ class DrillSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'description', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id', 'created_at']
 
     def get_questions(self, obj):
-        # Fetch questions with their related data
-        questions = obj.questions.all()
-        
-        # If it's a custom wordlist, we need to fetch the words
-        if obj.custom_wordlist:
-            words = obj.custom_wordlist.words.all()
-            
-            # Modify questions to include word and definition
-            modified_questions = []
-            for question in questions:
-                # Try to find a matching word based on the question's text or answer
-                matching_words = words.filter(word__icontains=question.answer or question.text)
-                
-                # If a matching word is found, add its details to the question
-                modified_question = DrillQuestionSerializer(question).data
+        # Read questions from new subclass models and shape a unified payload
+        from .models import SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion
+        request = self.context.get('request')
+        result = []
 
-                # If the original question object has 'word' and 'definition', use them
-                if hasattr(question, 'word') and question.word:
-                    modified_question['word'] = question.word
-                if hasattr(question, 'definition') and question.definition:
-                    modified_question['definition'] = question.definition
+        # Helper to add common fields
+        def base_payload(q, qtype):
+            return {
+                'id': q.id,
+                'text': getattr(q, 'text', None),
+                'type': qtype,
+                'word': getattr(q, 'word', None),
+                'definition': getattr(q, 'definition', None),
+            }
 
-                # Fallback to matching logic if not present
-                if not modified_question.get('word') or not modified_question.get('definition'):
-                    if matching_words.exists():
-                        matching_word = matching_words.first()
-                        modified_question['word'] = matching_word.word
-                        modified_question['definition'] = matching_word.definition
+        # Smart Select
+        for q in SmartSelectQuestion.objects.filter(drill=obj):
+            payload = base_payload(q, 'M')
+            payload['answer'] = q.answer
+            # choices via generic
+            choices = []
+            for c in q.choices_generic.all():
+                choices.append({
+                    'id': c.id,
+                    'text': c.text,
+                    'is_correct': c.is_correct,
+                    'image': request.build_absolute_uri(c.image.url) if request and c.image else (c.image.url if c.image else None),
+                    'video': request.build_absolute_uri(c.video.url) if request and c.video else (c.video.url if c.video else None),
+                })
+            payload['choices'] = choices
+            result.append(payload)
 
-                modified_questions.append(modified_question)
-            
-            return modified_questions
-        
-        # If it's a built-in wordlist, fetch the words
-        if hasattr(self, 'wordlistName') and self.wordlistName:
-            from .models import Vocabulary
-            builtin_words = Vocabulary.objects.filter(list__name=self.wordlistName)
-            
-            # Modify questions to include word and definition
-            modified_questions = []
-            for question in questions:
-                # Try to find a matching word based on the question's text or answer
-                matching_words = builtin_words.filter(word__icontains=question.answer or question.text)
-                
-                # If a matching word is found, add its details to the question
-                modified_question = DrillQuestionSerializer(question).data
+        # Blank Busters
+        for q in BlankBustersQuestion.objects.filter(drill=obj):
+            payload = base_payload(q, 'F')
+            payload['letterChoices'] = q.letterChoices
+            payload['answer'] = q.answer
+            payload['pattern'] = q.pattern
+            payload['hint'] = q.hint
+            choices = []
+            for c in q.choices_generic.all():
+                choices.append({
+                    'id': c.id,
+                    'text': c.text,
+                    'is_correct': c.is_correct,
+                    'image': request.build_absolute_uri(c.image.url) if request and c.image else (c.image.url if c.image else None),
+                    'video': request.build_absolute_uri(c.video.url) if request and c.video else (c.video.url if c.video else None),
+                })
+            payload['choices'] = choices
+            result.append(payload)
 
-                # If the original question object has 'word' and 'definition', use them
-                if hasattr(question, 'word') and question.word:
-                    modified_question['word'] = question.word
-                if hasattr(question, 'definition') and question.definition:
-                    modified_question['definition'] = question.definition
+        # Sentence Builder
+        for q in SentenceBuilderQuestion.objects.filter(drill=obj):
+            payload = base_payload(q, 'D')
+            payload['sentence'] = q.sentence
+            payload['dragItems'] = q.dragItems
+            payload['incorrectChoices'] = q.incorrectChoices
+            result.append(payload)
 
-                # Fallback to matching logic if not present
-                if not modified_question.get('word') or not modified_question.get('definition'):
-                    if matching_words.exists():
-                        matching_word = matching_words.first()
-                        modified_question['word'] = matching_word.word
-                        modified_question['definition'] = matching_word.definition
+        # Picture Word
+        for q in PictureWordQuestion.objects.filter(drill=obj):
+            payload = base_payload(q, 'P')
+            payload['pictureWord'] = q.pictureWord
+            payload['answer'] = q.answer
+            result.append(payload)
 
-                modified_questions.append(modified_question)
-            
-            return modified_questions
-        
-        # If no wordlist is associated, return questions as-is
-        return DrillQuestionSerializer(questions, many=True).data
+        # Memory Game
+        for q in MemoryGameQuestion.objects.filter(drill=obj):
+            payload = base_payload(q, 'G')
+            payload['memoryCards'] = q.memoryCards
+            result.append(payload)
+
+        return result
 
     def get_wordlist_name(self, obj):
         if obj.custom_wordlist:
@@ -438,377 +445,33 @@ class DrillSerializer(serializers.ModelSerializer):
         if custom_wordlist:
             drill.custom_wordlist = custom_wordlist
             drill.save()
-        for q_idx, question_data in enumerate(questions_data):
-            # Remove frontend-only fields not in the model
-            for key in ['letterChoices']:
-                if key in question_data and not hasattr(DrillQuestion, key):
-                    question_data.pop(key)
-            
-            choices_data = question_data.pop('choices', [])
-            # Store the answer field
-            answer = question_data.get('answer')
-            print(f"Creating question with answer: {answer}")  # Debug log
 
-            # Create the question with the answer field
-            question = DrillQuestion.objects.create(drill=drill, **question_data)
-            
-            # Handle choices for multiple choice and fill in the blank
-            for c_idx, choice_data in enumerate(choices_data):
-                media_key = choice_data.pop('media', None)
-                image = None
-                video = None
-                if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
-                    file = request.FILES[media_key]
-                    if file.content_type.startswith('image/'):
-                        image = file
-                    elif file.content_type.startswith('video/'):
-                        video = file
-                DrillChoice.objects.create(
-                    question=question,
-                    text=choice_data.get('text', ''),
-                    is_correct=str(choice_data.get('is_correct', False)).lower() == 'true',
-                    image=image,
-                    video=video,
-                )
-            
-            # Handle memory game cards
-            if question_data.get('type') == 'G':
-                memory_cards = question_data.get('memoryCards', [])
-                for c_idx, card_data in enumerate(memory_cards):
-                    media_key = card_data.get('media')
-                    if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
-                        file = request.FILES[media_key]
-                        if file.content_type.startswith('image/'):
-                            try:
-                                from django.core.files.storage import default_storage
-                                file_path = f'drill_choices/images/{file.name}'
-                                saved_path = default_storage.save(file_path, file)
-                                card_data['media'] = {
-                                    'url': request.build_absolute_uri(default_storage.url(saved_path)),
-                                    'type': file.content_type
-                                }
-                            except Exception as e:
-                                print(f"Error saving memory game image: {e}")
-                                card_data['media'] = None
-
-                question.memoryCards = memory_cards
-                question.save()
-
-            # Handle picture word images
-            if question_data.get('type') == 'P':
-                pictures = question_data.get('pictureWord', [])
-                updated_pictures = [] # Create a new list to store updated picture data
-                for p_idx, pic_data in enumerate(pictures):
-                    media_value = pic_data.get('media')
-                    processed_media = None
-
-                    if media_value and isinstance(media_value, str) and request and media_value in request.FILES:
-                        # This is a new file upload referenced by a key from frontend
-                        file = request.FILES[media_value]
-                        # Ensure it's an image before saving
-                        if file.content_type.startswith('image/'):
-                            try:
-                                from django.core.files.storage import default_storage
-                                # Define the target path within your media storage
-                                file_path = f'drill_choices/images/{file.name}'
-
-                                # Save the file using the default storage
-                                saved_path = default_storage.save(file_path, file)
-
-                                # Create the media data object with the saved file's URL
-                                processed_media = {
-                                    'url': request.build_absolute_uri(default_storage.url(saved_path)),
-                                    'type': file.content_type
-                                }
-                                print(f"Backend: Saved new picture word image to: {saved_path}") # Debugging
-
-                            except Exception as e:
-                                print(f"Backend: Error saving picture word file {file.name}: {e}") # Debugging
-                                # If saving fails, do not add this media
-                                processed_media = None # Explicitly set to None
-                        else:
-                             # Handle non-image files if necessary, or skip
-                             print(f"Backend: Skipping non-image file for picture word: {file.name}") # Debugging
-                             processed_media = None
-
-                    elif media_value and isinstance(media_value, dict) and 'url' in media_value:
-                        # This is existing media data with a URL, keep it as is
-                        processed_media = media_value
-                        print(f"Backend: Keeping existing picture word image URL: {media_value['url']}") # Debugging
-
-                    # Add the picture data with the processed media (or original if no media was provided or processed)
-                    updated_pic_data = {**pic_data}
-                    if processed_media is not None:
-                        updated_pic_data['media'] = processed_media
-                    elif 'media' in updated_pic_data and processed_media is None and isinstance(media_value, str) and media_value in request.FILES:
-                         # If a file was attempted but failed to save (processed_media is None), remove the media key from the data being saved
-                         del updated_pic_data['media']
-                    # If media_value was not provided at all, the original pic_data without media is fine
-
-                    updated_pictures.append(updated_pic_data)
-
-                # Assign the list of updated picture data back to the question
-                question.pictureWord = updated_pictures
-                question.save()
+        drill.create_with_questions(questions_data, request=request)
         return drill
 
     def update(self, instance, validated_data):
-        try:
-            request = self.context.get('request')
+        request = self.context.get('request')
+        
+        # Update basic fields
+        for attr, value in validated_data.items():
+            if attr != 'questions_input':
+                setattr(instance, attr, value)
+        instance.save()
             
-            # Handle the basic drill fields first
-            for attr, value in validated_data.items():
-                if attr != 'questions_input':
-                    setattr(instance, attr, value)
-            instance.save()
-            
-            # Process questions if provided
-            questions_data = validated_data.get('questions_input')
-            if questions_data is None:
-                return instance
-                
-            if not isinstance(questions_data, list):
-                if isinstance(questions_data, str):
-                    try:
-                        import json
-                        questions_data = json.loads(questions_data)
-                        if not isinstance(questions_data, list):
-                            questions_data = []
-                    except:
-                        questions_data = []
-                else:
-                    questions_data = []
-            
-            existing_questions = {str(q.id): q for q in instance.questions.all()}
-            questions_to_keep = []
-            
-            # Process each question in the input
-            for q_idx, question_data in enumerate(questions_data):
-                # Handle string conversion if needed
-                if isinstance(question_data, str):
-                    try:
-                        import json
-                        question_data = json.loads(question_data)
-                    except Exception as e:
-                        print(f"Error parsing question data JSON string: {e}")
-                        continue
-
-                if not isinstance(question_data, dict):
-                    print(f"Skipping invalid question data: {question_data}")
-                    continue
-
-                # Safe copy to avoid modifying the original and ensure 'answer' is present
-                question_dict = question_data.copy()
-
-                # Extract question ID if present
-                question_id = None
-                if 'id' in question_dict:
-                    try:
-                        # Ensure id is treated as string for consistent comparison
-                        question_id = str(question_dict.pop('id'))
-                    except (TypeError, ValueError) as e:
-                        print(f"Error processing question ID: {e}")
-                        question_id = None
-
-                choices_data = []
-                if 'choices' in question_dict:
-                    choices = question_dict.pop('choices')
-                    if isinstance(choices, list):
-                        choices_data = choices
-                    else:
-                         print(f"Warning: Expected choices to be a list, but got {type(choices)}")
-
-                # Fields that should *not* be directly set on the model from incoming data
-                # Remove fields that are not model fields or are handled separately (like choices_data)
-                fields_to_exclude_from_direct_set = ['created_at', 'updated_at', 'choices', 'dragItems', 'dropZones', 'memoryCards', 'pictureWord', 'id']
-                
-                # Ensure 'answer' is NOT in fields_to_exclude_from_direct_set
-                # The 'answer' field from question_dict should be set on the model
-
-                # Handle existing question update
-                question = None
-                if question_id and question_id in existing_questions:
-                    question = existing_questions[question_id]
-                    
-                    # Log question before update
-                    print(f"Updating existing question {question.id}. Before update: answer={question.answer}, text={question.text}, type={question.type}")
-                    print(f"Incoming question_dict for update: {question_dict}")
-
-                    # Update fields by iterating through incoming data
-                    # Explicitly set the answer field here
-                    if 'answer' in question_dict:
-                        question.answer = question_dict['answer']
-                        
-                    # Update other fields, excluding those we handle separately or shouldn't set directly
-                    for attr, value in question_dict.items():
-                         if attr not in fields_to_exclude_from_direct_set and hasattr(question, attr):
-                              setattr(question, attr, value)
-
-                    # Log question after setting attributes, before saving
-                    print(f"Question {question.id} after setting attributes (before save): answer={question.answer}, text={question.text}, type={question.type}")
-
-                    if 'word' in question_dict:
-                        question.word = question_dict['word']
-                    if 'definition' in question_dict:
-                        question.definition = question_dict['definition']
-
-                    question.save()
-
-                    # Log question after saving
-                    print(f"Question {question.id} after save: answer={question.answer}, text={question.text}, type={question.type}")
-
-                    questions_to_keep.append(question.id)
-
-                    # Delete existing choices for this question before adding new ones (only for M and F)
-                    if question.type in ['M', 'F']:
-                         question.choices.all().delete()
-
-                else:
-                    # Create new question
-                    # Use the incoming question_dict directly, which should include 'answer'
-                    print(f"Creating new question with dict: {question_dict}")
-                    try:
-                        # Remove frontend-only fields not in the model
-                        for key in ['letterChoices']:
-                            if key in question_dict and not hasattr(DrillQuestion, key):
-                                question_dict.pop(key)
-                        
-                        question = DrillQuestion.objects.create(drill=instance, **question_dict)
-
-                        # Log newly created question
-                        print(f"Successfully created new question {question.id}: answer={question.answer}, text={question.text}, type={question.type}")
-
-                        questions_to_keep.append(question.id)
-                    except Exception as e:
-                        print(f"Error creating question: {e}")
-                        # Log the dict that failed to create
-                        print(f"Failed to create question with dict: {question_dict}")
-                        continue # Skip this question if creation fails
-
-                # Add choices if we have a valid question and it's M or F type
-                if question and question.type in ['M', 'F']:
-                    for c_idx, choice_data in enumerate(choices_data):
-                         try:
-                            if isinstance(choice_data, str):
-                                try:
-                                    import json
-                                    choice_data = json.loads(choice_data)
-                                except Exception as e:
-                                    print(f"Error parsing choice data JSON string: {e}")
-                                    continue # Skip this choice if parsing fails
-
-                            if not isinstance(choice_data, dict):
-                                print(f"Skipping invalid choice data: {choice_data}")
-                                continue
-
-                            # Handle media
-                            media_key = None
-                            # Only pop media if it's intended to be handled as a file upload key
-                            # Keep existing media data if it's an object with a URL
-                            if 'media' in choice_data and isinstance(choice_data['media'], str) and request and choice_data['media'] in request.FILES:
-                                media_key = choice_data.pop('media')
-
-                            image = None
-                            video = None
-
-                            # Handle new file uploads referenced by media_key
-                            if media_key and isinstance(media_key, str) and request and media_key in request.FILES:
-                                file = request.FILES[media_key]
-                                if file.content_type.startswith('image/'):
-                                    image = file
-                                elif file.content_type.startswith('video/'):
-                                    video = file
-                            # Handle existing media if it's already a URL or file path string
-                            elif 'media' in choice_data and (isinstance(choice_data['media'], str) or (isinstance(choice_data['media'], dict) and 'url' in choice_data['media'])):
-                                # If it's a dict with a url, use the url
-                                media_value = choice_data['media']
-                                url = media_value['url'] if isinstance(media_value, dict) else media_value
-
-                                # Try to determine if it's an image or video from the URL or type
-                                is_image = False
-                                is_video = False
-
-                                # Check if type is provided in the original media_value dict
-                                if isinstance(media_value, dict) and 'type' in media_value and isinstance(media_value['type'], str):
-                                    is_image = media_value['type'].startswith('image/')
-                                    is_video = media_value['type'].startswith('video/')
-                                    
-                                # If no type or couldn't determine, try from URL extension
-                                if not (is_image or is_video):
-                                     parsed_url = urlparse(url)
-                                     path = parsed_url.path
-                                     ext = os.path.splitext(path)[1].lower()
-                                     is_image = ext in ['.jpg', '.jpeg', '.png', 'gif', '.webp']
-                                     is_video = ext in ['.mp4', '.webm', '.mov', '.avi']
-
-                                # Use the URL or path as the value for the image/video field
-                                if is_image:
-                                     image = url
-                                elif is_video:
-                                     video = url
-
-
-
-
-                            # Correctly handle the is_correct boolean based on the question's answer field
-                            # This assumes the question.answer field holds the correct index for M/F types
-                            is_correct = False
-                            if question.answer is not None:
-                                 try:
-                                     # Convert question.answer to int for comparison with choice index
-                                     correct_index = int(question.answer)
-                                     is_correct = c_idx == correct_index
-                                 except (ValueError, TypeError):
-                                     # Handle cases where answer is not a valid integer (e.g., for Picture Word type, though this block is only for M/F)
-                                     pass
-
-                            # Create choice
-                            try:
-                                # Clean choice data (remove keys not in model)
-                                choice_dict_for_create = {
-                                    'question': question,
-                                    'text': choice_data.get('text', ''),
-                                    'is_correct': is_correct, # Use the correctly determined is_correct status
-                                }
-
-                                if image: # Add image only if it's not None/False
-                                    choice_dict_for_create['image'] = image
-                                if video: # Add video only if it's not None/False
-                                    choice_dict_for_create['video'] = video
-                                    
-                                # Ensure other incoming choice data fields are not included if not in model
-                                # For simplicity, we are only including 'text', 'is_correct', 'image', 'video'
-
-                                # Debug output
-                                print(f"Creating choice for question {question.id}: {choice_dict_for_create}")
-
-                                choice = DrillChoice.objects.create(**choice_dict_for_create)
-                                print(f"Successfully created choice {choice.id}")
-                            except Exception as e:
-                                print(f"Error creating choice: {str(e)}")
-                                import traceback
-                                print(traceback.format_exc())
-                                continue
-                         except Exception as e:
-                            print(f"Error processing choice: {e}")
-                            continue
-
-            # Delete questions not in the update list
-            # Check if questions_data is not empty before deleting
-            if questions_data:
-                questions_to_delete = set(existing_questions.keys()) - set(str(q_id) for q_id in questions_to_keep)
-                for q_id in questions_to_delete:
-                    try:
-                        print(f"Deleting question with ID: {q_id}")
-                        existing_questions[q_id].delete()
-                    except Exception as e:
-                        print(f"Error deleting question {q_id}: {e}")
-
+        # Process questions if provided
+        questions_data = validated_data.get('questions_input')
+        if questions_data is None:
             return instance
-        except Exception as e:
-            print(f"Error in drill update: {e}")
-            # Re-raise the exception so it's not silenced
-            raise
+                
+        if isinstance(questions_data, str):
+            import json
+            try:
+                questions_data = json.loads(questions_data)
+            except Exception:
+                questions_data = []
+            
+        instance.update_with_questions(questions_data, request=request)
+        return instance
 
 class MemoryGameResultSerializer(serializers.ModelSerializer):
     class Meta:
