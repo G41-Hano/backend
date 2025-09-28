@@ -731,7 +731,20 @@ class MemoryGameSubmissionView(APIView):
         try:
             # Get the drill and question
             drill = Drill.objects.get(id=drill_id)
-            question = DrillQuestionBase.objects.get(id=question_id, drill=drill)
+            # Find the question in the appropriate subclass model
+            question = None
+            for model_cls in [SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion]:
+                try:
+                    question = model_cls.objects.get(id=question_id, drill=drill)
+                    break
+                except model_cls.DoesNotExist:
+                    continue
+            
+            if not question:
+                return Response(
+                    {"error": "Question not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
             
             if question.type != 'G':
                 return Response(
@@ -755,10 +768,14 @@ class MemoryGameSubmissionView(APIView):
                 drill_result.completion_time = timezone.now()
                 drill_result.save()
             
-            # Calculate score by delegating to model's compute_score
+            # Use frontend-calculated score as the single source of truth
             attempts = request.data.get('attempts', 0)
             matches = request.data.get('matches', [])
-            score = question.compute_score(matches, meta={'attempts': attempts})
+            frontend_score = request.data.get('points', 0)
+            try:
+                score = float(frontend_score)
+            except (ValueError, TypeError):
+                score = 0.0
             
             # Create memory game result
             memory_result = MemoryGameResult.objects.create(
@@ -789,7 +806,7 @@ class MemoryGameSubmissionView(APIView):
                 {"error": "Drill not found"},
                 status=status.HTTP_404_NOT_FOUND
             )
-        except DrillQuestionBase.DoesNotExist:
+        except Exception as e:
             return Response(
                 {"error": "Question not found"},
                 status=status.HTTP_404_NOT_FOUND
@@ -1290,16 +1307,28 @@ class SubmitAnswerView(APIView):
             question_instance = None
             question_model_type = None
             
-            # Iterate through all concrete question models to find the question
-            for q_type_code, model_cls in self.QUESTION_MODEL_MAP.items():
+            # Get question type from request data to narrow down the search
+            question_type = request.data.get('question_type')
+            
+            if question_type and question_type in self.QUESTION_MODEL_MAP:
+                # If question type is provided, search only in that specific model
+                model_cls = self.QUESTION_MODEL_MAP[question_type]
                 try:
-                    # Attempt to get the question from this specific model
-                    q = model_cls.objects.get(id=question_id, drill=drill)
-                    question_instance = q
-                    question_model_type = q_type_code
-                    break # Found the question, stop searching
+                    question_instance = model_cls.objects.get(id=question_id, drill=drill)
+                    question_model_type = question_type
                 except model_cls.DoesNotExist:
-                    continue # Not found in this model, try the next one
+                    pass
+            else:
+                # Fallback: iterate through all concrete question models to find the question
+                for q_type_code, model_cls in self.QUESTION_MODEL_MAP.items():
+                    try:
+                        # Attempt to get the question from this specific model
+                        q = model_cls.objects.get(id=question_id, drill=drill)
+                        question_instance = q
+                        question_model_type = q_type_code
+                        break # Found the question, stop searching
+                    except model_cls.DoesNotExist:
+                        continue # Not found in this model, try the next one
 
             if not question_instance:
                 # If after checking all, it's still not found
@@ -1343,20 +1372,24 @@ class SubmitAnswerView(APIView):
 
             # Determine if the answer is correct
             is_correct = question.check_answer(submitted_answer_data)
+            print(f"Backend validation - Question ID {question.id}, type {question.type}, submitted: {submitted_answer_data}, is_correct: {is_correct}")
 
-            # Compute points on the server by delegating to model's compute_score
+            # Use frontend-calculated points as the single source of truth
             points_to_award = 0.0
-            if question.type == 'G': # Memory Game has specific scoring logic
-                attempts_for_memory = request.data.get('attempts', 0) # This is likely total 'clicks' or 'turns'
-                computed = question.compute_score(submitted_answer_data, meta={'attempts': attempts_for_memory})
-                points_to_award = float(computed) if is_correct else 0.0
-            else: # All other question types
-                wrong_attempts_for_other = request.data.get('wrong_attempts', 0) # This is number of incorrect submissions for the question
-                computed = question.compute_score(submitted_answer_data, meta={'wrong_attempts': wrong_attempts_for_other})
-                points_to_award = float(computed) if is_correct else 0.0
+            if is_correct:
+                # Get points from frontend submission
+                frontend_points = request.data.get('points', 0)
+                try:
+                    points_to_award = float(frontend_points)
+                except (ValueError, TypeError):
+                    points_to_award = 0.0
+                print(f"Points calculation - Frontend points: {frontend_points}, Awarded: {points_to_award}")
+            else:
+                print(f"Answer incorrect, awarding 0 points")
 
             # Create or update the QuestionResult for this specific question (generic link)
             ct = ContentType.objects.get_for_model(question) # Get content type of the concrete question
+            print(f"Creating QuestionResult for question ID {question.id}, type {question.type}, content_type {ct}, is_correct {is_correct}, points {points_to_award}")
             question_result, created = QuestionResult.objects.update_or_create(
                 drill_result=drill_result,
                 content_type=ct,
@@ -1371,6 +1404,7 @@ class SubmitAnswerView(APIView):
                     'points_awarded': points_to_award
                 }
             )
+            print(f"QuestionResult {'created' if created else 'updated'} with ID {question_result.id}")
 
             # Update overall points on DrillResult
             #drill_result.points += points_to_award
@@ -1429,32 +1463,16 @@ class SubmitAnswerView(APIView):
                 return False
 
         elif question.type == 'F': # Fill in the Blank
-            try:
-                submitted_index = int(submitted_answer_data)
-                # Get the correct choice index from the question's answer field
-                correct_index = int(question.answer) if question.answer is not None else None
-                print(f"Fill in Blank - Submitted: {submitted_index}, Correct: {correct_index}, Question ID: {question.id}")  # Debug log
-                return submitted_index == correct_index
-            except (ValueError, TypeError) as e:
-                print(f"Fill in Blank Error: {e}, Question ID: {question.id}")  # Debug log
-                return False
+            # Use the model's check_answer method which handles both index and text-based answers
+            result = question.check_answer(submitted_answer_data)
+            print(f"Fill in Blank - Submitted: {submitted_answer_data}, Question ID: {question.id}, Result: {result}")  # Debug log
+            return result
 
-        elif question.type == 'D': # Drag and Drop
-            # Submitted answer is likely a mapping of drop zone index to drag item index
-            # Example submitted_answer_data: { "0": 2, "1": 0 } (Drop Zone 0 got Drag Item 2, Drop Zone 1 got Drag Item 0)
-            # The correct mapping is stored in question.dropZones (correctItemIndex for each zone)
-            if isinstance(submitted_answer_data, dict) and question.dropZones:
-                 is_correct = True
-                 for i, drop_zone in enumerate(question.dropZones):
-                     submitted_item_index = submitted_answer_data.get(str(i)) # Get submitted item index for this drop zone index (key is string)
-                     correct_item_index = drop_zone.get('correctItemIndex')
-
-                     # Check if submitted index matches correct index for this drop zone
-                     if submitted_item_index is None or submitted_item_index != correct_item_index:
-                         is_correct = False
-                         break # No need to check further if one mapping is incorrect
-                 return is_correct
-            return False
+        elif question.type == 'D': # Drag and Drop (Sentence Builder)
+            # Use the model's check_answer method which handles both dict and list formats
+            result = question.check_answer(submitted_answer_data)
+            print(f"Sentence Builder - Submitted: {submitted_answer_data}, Question ID: {question.id}, Result: {result}")  # Debug log
+            return result
 
         elif question.type == 'G': # Memory Game
             # For memory game, we just need to check if all cards are matched

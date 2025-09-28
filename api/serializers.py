@@ -678,9 +678,18 @@ class WordListSerializer(serializers.ModelSerializer):
 
 class QuestionResultSerializer(serializers.ModelSerializer):
     # You might want to include some question details here for easier frontend display
-    question_id = serializers.PrimaryKeyRelatedField(source='question.id', read_only=True)
-    question_text = serializers.CharField(source='question.text', read_only=True)
-    question_type = serializers.CharField(source='question.type', read_only=True)
+    question_id = serializers.SerializerMethodField()
+    question_text = serializers.SerializerMethodField()
+    question_type = serializers.SerializerMethodField()
+
+    def get_question_id(self, obj):
+        return obj.object_id if obj.question_generic else None
+    
+    def get_question_text(self, obj):
+        return obj.question_generic.text if obj.question_generic else None
+    
+    def get_question_type(self, obj):
+        return obj.question_generic.type if obj.question_generic else None
 
     class Meta:
         model = QuestionResult

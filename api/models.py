@@ -341,6 +341,7 @@ class Drill(models.Model):
             # Create question
             question_fields = {k: v for k, v in q_data.items() if k not in ['id', 'choices']}
             question = model_cls.objects.create(drill=self, **question_fields)
+            print(f"Created {q_type} question with ID {question.id} for drill {self.id}")
 
             # Handle choices for SmartSelect/BlankBusters
             if q_type in ['M', 'F'] and choices_data:
@@ -377,12 +378,150 @@ class Drill(models.Model):
         
     def update_with_questions(self, questions_input, request=None):
         """
-        Simple strategy: delete existing questions and recreate from payload
-        to keep this change safe and predictable for now.
+        Upsert strategy:
+        - Update existing questions by id and type
+        - Create new questions not having an id
+        - Delete questions removed from the payload
+        Choices for M/F are fully replaced from the payload
         """
-        # Delete via cascade (choices generic will be deleted as well)
-        self.questions.all().delete()
-        return self.create_with_questions(questions_input, request)
+        from django.contrib.contenttypes.models import ContentType
+
+        type_to_model = {
+            'M': SmartSelectQuestion,
+            'F': BlankBustersQuestion,
+            'D': SentenceBuilderQuestion,
+            'P': PictureWordQuestion,
+            'G': MemoryGameQuestion,
+        }
+
+        # Track which IDs to keep per type
+        kept_ids_by_type = {t: set() for t in type_to_model.keys()}
+
+        for q_data in questions_input or []:
+            if not isinstance(q_data, dict):
+                continue
+
+            q_type = q_data.get('type') or q_data.get('drill_type')
+            model_cls = type_to_model.get(q_type)
+            if not model_cls:
+                continue
+
+            # Extract choices for later (M/F only)
+            choices_data = q_data.pop('choices', []) if isinstance(q_data, dict) else []
+
+            # Preprocess media for P and G just like in create
+            try:
+                if q_type == 'P' and isinstance(q_data.get('pictureWord'), list):
+                    processed_pictures = []
+                    for picture in q_data.get('pictureWord', []):
+                        if not isinstance(picture, dict):
+                            processed_pictures.append(picture)
+                            continue
+                        media_key = picture.get('media')
+                        if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                            f = request.FILES[media_key]
+                            saved_url = None
+                            if f.content_type.startswith('image/'):
+                                filename = f"vocabulary/images/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            elif f.content_type.startswith('video/'):
+                                filename = f"vocabulary/videos/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            if saved_url:
+                                picture['media'] = {'url': saved_url}
+                        elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                            picture['media'] = {'url': media_key}
+                        processed_pictures.append(picture)
+                    q_data['pictureWord'] = processed_pictures
+
+                if q_type == 'G' and isinstance(q_data.get('memoryCards'), list):
+                    processed_cards = []
+                    for card in q_data.get('memoryCards', []):
+                        if not isinstance(card, dict):
+                            processed_cards.append(card)
+                            continue
+                        media_key = card.get('media')
+                        if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                            f = request.FILES[media_key]
+                            saved_url = None
+                            if f.content_type.startswith('image/'):
+                                filename = f"vocabulary/images/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            elif f.content_type.startswith('video/'):
+                                filename = f"vocabulary/videos/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            if saved_url:
+                                card['media'] = saved_url
+                        elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                            card['media'] = media_key
+                        processed_cards.append(card)
+                    q_data['memoryCards'] = processed_cards
+            except Exception:
+                pass
+
+            # Upsert question
+            question_id = q_data.get('id')
+            question_fields = {k: v for k, v in q_data.items() if k not in ['id', 'choices']}
+            question = None
+            if question_id is not None:
+                question = model_cls.objects.filter(drill=self, id=question_id).first()
+
+            if question:
+                # Update existing
+                for k, v in question_fields.items():
+                    if hasattr(question, k):
+                        setattr(question, k, v)
+                question.save()
+            else:
+                # Create new
+                question = model_cls.objects.create(drill=self, **question_fields)
+
+            kept_ids_by_type[q_type].add(question.id)
+
+            # Replace choices for M/F
+            if q_type in ['M', 'F']:
+                # Delete existing generic choices
+                question.choices_generic.all().delete()
+                ct = ContentType.objects.get_for_model(question)
+                for c_idx, choice in enumerate(choices_data or []):
+                    image = None
+                    video = None
+                    media_key = choice.pop('media', None)
+                    if request and media_key and isinstance(media_key, str) and hasattr(request, 'FILES') and media_key in request.FILES:
+                        f = request.FILES[media_key]
+                        if f.content_type.startswith('image/'):
+                            image = f
+                        elif f.content_type.startswith('video/'):
+                            video = f
+
+                    is_correct = False
+                    if hasattr(question, 'answer') and question.answer is not None:
+                        try:
+                            is_correct = (c_idx == int(question.answer))
+                        except (ValueError, TypeError):
+                            is_correct = False
+
+                    DrillChoice.objects.create(
+                        content_type=ct,
+                        object_id=question.id,
+                        text=choice.get('text', ''),
+                        image=image,
+                        video=video,
+                        is_correct=is_correct,
+                    )
+
+        # Delete questions that were removed in payload
+        for t, model_cls in type_to_model.items():
+            existing = model_cls.objects.filter(drill=self).values_list('id', flat=True)
+            to_delete = [qid for qid in existing if qid not in kept_ids_by_type[t]]
+            if to_delete:
+                model_cls.objects.filter(id__in=to_delete, drill=self).delete()
+
+        return self
 
 class DrillQuestionBase(models.Model): # abstract class will not be translated to a table in the database
     DRILL_TYPE = [
@@ -482,32 +621,46 @@ class SentenceBuilderQuestion(DrillQuestionBase):
 
     def check_answer(self, submitted_answer):
         """
-        Expected formats supported:
-        - submitted_answer is a dict mapping str(index) -> selected drag item index
-        - submitted_answer is a list of selected indices ordered to fill blanks
-        This method validates exact position match against the order of dragItems.
+        Accepts any of the following formats and validates order strictly:
+        - dict: {"0": 2, "1": 0} indices by blank position
+        - list[int]: [2, 0] indices by blank position
+        - list[str]: ["wordA", "wordB"] texts by blank position
         """
         try:
             if not self.dragItems:
                 return False
-            num_targets = len(self.dragItems)
-            # Dict form
+            target_texts = [str(item.get('text', '')).strip().lower() for item in self.dragItems]
+            num_targets = len(target_texts)
+
+            # Dict form of indices
             if isinstance(submitted_answer, dict):
+                built = []
                 for i in range(num_targets):
                     sel = submitted_answer.get(str(i))
                     if sel is None:
                         return False
-                    if int(sel) != i:
+                    built.append(str(self.dragItems[int(sel)].get('text', '')).strip().lower())
+                return built == target_texts
+
+            # List form of indices
+            if isinstance(submitted_answer, list) and all(isinstance(x, (int, str)) for x in submitted_answer):
+                # If values are strings but numeric, treat as indices
+                try:
+                    idx_list = [int(x) for x in submitted_answer]
+                    if len(idx_list) != num_targets:
                         return False
-                return True
-            # List form
-            if isinstance(submitted_answer, list):
-                if len(submitted_answer) != num_targets:
+                    built = [str(self.dragItems[i].get('text', '')).strip().lower() for i in idx_list]
+                    return built == target_texts
+                except (ValueError, TypeError):
+                    # Fallback to text comparison if not all indices
+                    pass
+
+            # List form of texts
+            if isinstance(submitted_answer, list) and all(isinstance(x, str) for x in submitted_answer):
+                texts = [str(x).strip().lower() for x in submitted_answer]
+                if len(texts) != num_targets:
                     return False
-                for i, sel in enumerate(submitted_answer):
-                    if int(sel) != i:
-                        return False
-                return True
+                return texts == target_texts
         except Exception:
             return False
         return False
