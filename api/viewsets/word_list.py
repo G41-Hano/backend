@@ -25,6 +25,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 # }
 
 class WordListView(viewsets.ModelViewSet):
+  queryset = WordList.objects.all()
   serializer_class = WordListSerializer
   permission_classes = [IsAuthenticated]
 

@@ -4,6 +4,10 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from .utils.encryption import encrypt, decrypt
 from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
+from django.core.files.storage import default_storage
+import os
 
 # Create your models here.
 
@@ -23,7 +27,7 @@ class Badge(models.Model):
     class Meta:
         ordering = ['points_required']
 
-class User(AbstractUser):
+class User(AbstractUser): # inherit AbstractUser
     email = models.EmailField(unique=True)  
     first_name_encrypted = models.BinaryField(null=True)
     last_name_encrypted = models.BinaryField(null=True)
@@ -239,61 +243,503 @@ class Vocabulary(models.Model):
   list = models.ForeignKey(WordList, on_delete=models.CASCADE, related_name="words")
    
 class Drill(models.Model):
-  id = models.AutoField(primary_key=True)
-  title = models.TextField(max_length=50)
-  description = models.TextField(blank=True, null=True)
-  created_at = models.DateTimeField(auto_now_add=True)
-  deadline = models.DateTimeField()
-  total_run = models.PositiveIntegerField(default=1)  # how many times the student will take the drill 
-  created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drills')
-  classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='drills')
-  custom_wordlist = models.ForeignKey('WordList', on_delete=models.SET_NULL, null=True, blank=True, related_name='drills', default=None)
-  STATUS_CHOICES = [
-    ('draft', 'Draft'),
-    ('published', 'Published'),
-  ]
-  status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    id = models.AutoField(primary_key=True)
+    title = models.CharField(max_length=50)
+    description = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deadline = models.DateTimeField()
+    total_run = models.PositiveIntegerField(default=1)  # how many times the student will take the drill 
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drills')
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='drills')
+    custom_wordlist = models.ForeignKey('WordList', on_delete=models.SET_NULL, null=True, blank=True, related_name='drills', default=None)
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('published', 'Published'),
+    ]
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    
+    def create_with_questions(self, questions_input, request=None):
+        """
+        Create questions of appropriate subclass based on 'type' in questions_input.
+        Supports choices via GenericRelation for SmartSelect/BlankBusters.
+        """
+        from django.contrib.contenttypes.models import ContentType
+        type_to_model = {
+        'M': SmartSelectQuestion,
+        'F': BlankBustersQuestion,
+        'D': SentenceBuilderQuestion,
+        'P': PictureWordQuestion,
+        'G': MemoryGameQuestion,
+        }
 
-class DrillQuestion(models.Model):
-  TYPE = [
-    ("M","Multiple Choice"),
-    ("D","Drag and Drop"),
-    ("F","Fill in the Blank"),
-    ("G","Memory Game"),  
-    ("P","Picture Word")
-  ]
+        for q_data in questions_input or []:
+            q_type = q_data.get('type') or q_data.get('drill_type')
+            model_cls = type_to_model.get(q_type)
+            if not model_cls:
+                continue
 
-  id = models.AutoField(primary_key=True)
-  drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='questions')
-  text = models.TextField(max_length=200)
-  type = models.CharField(choices=TYPE, default='M', max_length=1)
-  answer = models.TextField(max_length=200, blank=True, null=True)  
-  letterChoices = models.JSONField(null=True, blank=True)  
-  word = models.CharField(max_length=255, blank=True, null=True)
-  definition = models.TextField(blank=True, null=True)
-  
-  # Fields for Blank Busters
-  pattern = models.CharField(max_length=200, blank=True, null=True)  # For storing the pattern with blanks
-  hint = models.TextField(blank=True, null=True)  # For storing hints
+            # Extract and remove choices for later processing
+            choices_data = q_data.pop('choices', []) if isinstance(q_data, dict) else []
 
-  # Fields for Sentence Builder
-  sentence = models.TextField(blank=True, null=True)  # For storing the sentence with blanks
-  dragItems = models.JSONField(default=list, blank=True, null=True)  # For storing correct answers
-  incorrectChoices = models.JSONField(default=list, blank=True, null=True)  # For storing incorrect choices
-  
-  # Fields for Picture Word
-  pictureWord = models.JSONField(default=list, blank=True, null=True)  
+            # Handle media for Picture Word (P) and Memory Game (G) before creating the question
+            if isinstance(q_data, dict):
+                try:
+                    # Picture Word: map media -> url
+                    if q_type == 'P' and isinstance(q_data.get('pictureWord'), list):
+                        processed_pictures = []
+                        for picture in q_data.get('pictureWord', []):
+                            if not isinstance(picture, dict):
+                                processed_pictures.append(picture)
+                                continue
+                            media_key = picture.get('media')
+                            if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                                f = request.FILES[media_key]
+                                saved_url = None
+                                if f.content_type.startswith('image/'):
+                                    filename = f"vocabulary/images/{os.path.basename(f.name)}"
+                                    saved_path = default_storage.save(filename, f)
+                                    saved_url = default_storage.url(saved_path)
+                                elif f.content_type.startswith('video/'):
+                                    filename = f"vocabulary/videos/{os.path.basename(f.name)}"
+                                    saved_path = default_storage.save(filename, f)
+                                    saved_url = default_storage.url(saved_path)
+                                if saved_url:
+                                    picture['media'] = {'url': saved_url}
+                            elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                                picture['media'] = {'url': media_key}
+                            processed_pictures.append(picture)
+                        q_data['pictureWord'] = processed_pictures
 
-  # Fields for Memory Game
-  memoryCards = models.JSONField(default=list, blank=True, null=True) 
+                    # Memory Game: map media -> content
+                    if q_type == 'G' and isinstance(q_data.get('memoryCards'), list):
+                        processed_cards = []
+                        for card in q_data.get('memoryCards', []):
+                            if not isinstance(card, dict):
+                                processed_cards.append(card)
+                                continue
+                            media_key = card.get('media')
+                            if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                                f = request.FILES[media_key]
+                                saved_url = None
+                                if f.content_type.startswith('image/'):
+                                    filename = f"vocabulary/images/{os.path.basename(f.name)}"
+                                    saved_path = default_storage.save(filename, f)
+                                    saved_url = default_storage.url(saved_path)
+                                elif f.content_type.startswith('video/'):
+                                    filename = f"vocabulary/videos/{os.path.basename(f.name)}"
+                                    saved_path = default_storage.save(filename, f)
+                                    saved_url = default_storage.url(saved_path)
+                                if saved_url:
+                                    card['media'] = saved_url
+                            elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                                card['media'] = media_key
+                            processed_cards.append(card)
+                        q_data['memoryCards'] = processed_cards
+                except Exception:
+                    pass
 
-  # Other fields
-  dropZones = models.JSONField(default=list, blank=True, null=True)
-  blankPosition = models.IntegerField(blank=True, null=True)
+            # Create question
+            question_fields = {k: v for k, v in q_data.items() if k not in ['id', 'choices']}
+            question = model_cls.objects.create(drill=self, **question_fields)
+            print(f"Created {q_type} question with ID {question.id} for drill {self.id}")
+
+            # Handle choices for SmartSelect/BlankBusters
+            if q_type in ['M', 'F'] and choices_data:
+                ct = ContentType.objects.get_for_model(question)
+                for c_idx, choice in enumerate(choices_data):
+                    # Handle optional media from request.FILES (key in 'media')
+                    image = None
+                    video = None
+                    media_key = choice.pop('media', None)
+                    if request and media_key and isinstance(media_key, str) and hasattr(request, 'FILES') and media_key in request.FILES:
+                        f = request.FILES[media_key]
+                        if f.content_type.startswith('image/'):
+                            image = f
+                        elif f.content_type.startswith('video/'):
+                            video = f
+
+                    is_correct = False
+                    if hasattr(question, 'answer') and question.answer is not None:
+                        try:
+                            is_correct = (c_idx == int(question.answer))
+                        except (ValueError, TypeError):
+                            is_correct = False
+
+                    DrillChoice.objects.create(
+                        content_type=ct,
+                        object_id=question.id,
+                        text=choice.get('text', ''),
+                        image=image,
+                        video=video,
+                        is_correct=is_correct,
+                    )
+        
+        return self
+        
+    def update_with_questions(self, questions_input, request=None):
+        """
+        Upsert strategy:
+        - Update existing questions by id and type
+        - Create new questions not having an id
+        - Delete questions removed from the payload
+        Choices for M/F are fully replaced from the payload
+        """
+        from django.contrib.contenttypes.models import ContentType
+
+        type_to_model = {
+            'M': SmartSelectQuestion,
+            'F': BlankBustersQuestion,
+            'D': SentenceBuilderQuestion,
+            'P': PictureWordQuestion,
+            'G': MemoryGameQuestion,
+        }
+
+        # Track which IDs to keep per type
+        kept_ids_by_type = {t: set() for t in type_to_model.keys()}
+
+        for q_data in questions_input or []:
+            if not isinstance(q_data, dict):
+                continue
+
+            q_type = q_data.get('type') or q_data.get('drill_type')
+            model_cls = type_to_model.get(q_type)
+            if not model_cls:
+                continue
+
+            # Extract choices for later (M/F only)
+            choices_data = q_data.pop('choices', []) if isinstance(q_data, dict) else []
+
+            # Preprocess media for P and G just like in create
+            try:
+                if q_type == 'P' and isinstance(q_data.get('pictureWord'), list):
+                    processed_pictures = []
+                    for picture in q_data.get('pictureWord', []):
+                        if not isinstance(picture, dict):
+                            processed_pictures.append(picture)
+                            continue
+                        media_key = picture.get('media')
+                        if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                            f = request.FILES[media_key]
+                            saved_url = None
+                            if f.content_type.startswith('image/'):
+                                filename = f"vocabulary/images/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            elif f.content_type.startswith('video/'):
+                                filename = f"vocabulary/videos/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            if saved_url:
+                                picture['media'] = {'url': saved_url}
+                        elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                            picture['media'] = {'url': media_key}
+                        processed_pictures.append(picture)
+                    q_data['pictureWord'] = processed_pictures
+
+                if q_type == 'G' and isinstance(q_data.get('memoryCards'), list):
+                    processed_cards = []
+                    for card in q_data.get('memoryCards', []):
+                        if not isinstance(card, dict):
+                            processed_cards.append(card)
+                            continue
+                        media_key = card.get('media')
+                        if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                            f = request.FILES[media_key]
+                            saved_url = None
+                            if f.content_type.startswith('image/'):
+                                filename = f"vocabulary/images/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            elif f.content_type.startswith('video/'):
+                                filename = f"vocabulary/videos/{os.path.basename(f.name)}"
+                                saved_path = default_storage.save(filename, f)
+                                saved_url = default_storage.url(saved_path)
+                            if saved_url:
+                                card['media'] = saved_url
+                        elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                            card['media'] = media_key
+                        processed_cards.append(card)
+                    q_data['memoryCards'] = processed_cards
+            except Exception:
+                pass
+
+            # Upsert question
+            question_id = q_data.get('id')
+            question_fields = {k: v for k, v in q_data.items() if k not in ['id', 'choices']}
+            question = None
+            if question_id is not None:
+                question = model_cls.objects.filter(drill=self, id=question_id).first()
+
+            if question:
+                # Update existing
+                for k, v in question_fields.items():
+                    if hasattr(question, k):
+                        setattr(question, k, v)
+                question.save()
+            else:
+                # Create new
+                question = model_cls.objects.create(drill=self, **question_fields)
+
+            kept_ids_by_type[q_type].add(question.id)
+
+            # Replace choices for M/F
+            if q_type in ['M', 'F']:
+                # Delete existing generic choices
+                question.choices_generic.all().delete()
+                ct = ContentType.objects.get_for_model(question)
+                for c_idx, choice in enumerate(choices_data or []):
+                    image = None
+                    video = None
+                    media_key = choice.pop('media', None)
+                    if request and media_key and isinstance(media_key, str) and hasattr(request, 'FILES') and media_key in request.FILES:
+                        f = request.FILES[media_key]
+                        if f.content_type.startswith('image/'):
+                            image = f
+                        elif f.content_type.startswith('video/'):
+                            video = f
+
+                    is_correct = False
+                    if hasattr(question, 'answer') and question.answer is not None:
+                        try:
+                            is_correct = (c_idx == int(question.answer))
+                        except (ValueError, TypeError):
+                            is_correct = False
+
+                    DrillChoice.objects.create(
+                        content_type=ct,
+                        object_id=question.id,
+                        text=choice.get('text', ''),
+                        image=image,
+                        video=video,
+                        is_correct=is_correct,
+                    )
+
+        # Delete questions that were removed in payload
+        for t, model_cls in type_to_model.items():
+            existing = model_cls.objects.filter(drill=self).values_list('id', flat=True)
+            to_delete = [qid for qid in existing if qid not in kept_ids_by_type[t]]
+            if to_delete:
+                model_cls.objects.filter(id__in=to_delete, drill=self).delete()
+
+        return self
+
+class DrillQuestionBase(models.Model): # abstract class will not be translated to a table in the database
+    DRILL_TYPE = [
+        ("M", "Smart Select"),
+        ("F", "Blank Busters"),
+        ("D", "Sentence Builder"),
+        ("P", "Picture Word"),
+        ("G", "Memory Game"),
+    ]
+
+    drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name="%(class)s_questions")
+    type = models.CharField(choices=DRILL_TYPE, default='S', max_length=1)
+
+    text = models.CharField(max_length=200)
+    word = models.CharField(max_length=255, blank=True, null=True)
+    definition = models.TextField(blank=True, null=True)
+
+    class Meta:
+        abstract = True
+
+    # Abstract methods to be implemented by subclasses
+    def check_answer(self, submitted_answer): raise NotImplementedError("Subclasses must implement this method")
+    def compute_score(self, submitted_answer, meta=None): return None
+
+    def save(self, *args, **kwargs):
+        if hasattr(self, 'drill_type'):
+            self.type = getattr(self, 'drill_type', self.type)
+        super().save(*args, **kwargs)
+
+class SmartSelectQuestion(DrillQuestionBase):
+    drill_type = "M"
+    answer = models.CharField(max_length=200, blank=True, null=True)  
+    choices_generic = GenericRelation('DrillChoice', related_query_name='smartselect_question')
+
+    def check_answer(self, submitted_answer):
+        try:
+            if submitted_answer is None or self.answer is None:
+                return False
+            return int(submitted_answer) == int(self.answer)
+        except (ValueError, TypeError):
+            return False
+
+    def compute_score(self, submitted_answer, meta=None):
+        # Base 100 minus 10 per incorrect attempt
+        wrong_attempts = 0
+        if isinstance(meta, dict):
+            try:
+                wrong_attempts = max(0, int(meta.get('wrong_attempts', 0)))
+            except (ValueError, TypeError):
+                wrong_attempts = 0
+        return max(0.0, 100.0 - (wrong_attempts * 10.0))
+
+class BlankBustersQuestion(DrillQuestionBase):
+    drill_type = "F"
+    letterChoices = models.JSONField(null=True, blank=True)  
+    answer = models.CharField(max_length=200, blank=True, null=True)  
+    pattern = models.CharField(max_length=200, blank=True, null=True)  
+    hint = models.TextField(blank=True, null=True)  
+    choices_generic = GenericRelation('DrillChoice', related_query_name='blankbusters_question')
+
+    def check_answer(self, submitted_answer):
+        # Support both index-based and text-based answers for backward compatibility
+        if submitted_answer is None:
+            return False
+        # Index-based 
+        try:
+            submitted_index = int(submitted_answer)
+            # When using index-based, derive correct index from self.answer if numeric, else from letterChoices is_correct
+            try:
+                correct_index = int(self.answer) if self.answer is not None else None
+                if correct_index is not None:
+                    return submitted_index == correct_index
+            except (ValueError, TypeError):
+                pass
+        except (ValueError, TypeError):
+            pass
+
+        # Text-based compare (case-insensitive, trimmed)
+        if isinstance(submitted_answer, str) and self.answer:
+            return submitted_answer.strip().lower() == str(self.answer).strip().lower()
+        return False
+
+    def compute_score(self, submitted_answer, meta=None):
+        wrong_attempts = 0
+        if isinstance(meta, dict):
+            try:
+                wrong_attempts = max(0, int(meta.get('wrong_attempts', 0)))
+            except (ValueError, TypeError):
+                wrong_attempts = 0
+        return max(0.0, 100.0 - (wrong_attempts * 10.0))
+
+class SentenceBuilderQuestion(DrillQuestionBase):
+    drill_type = "D"
+    sentence = models.TextField(blank=True, null=True)  
+    dragItems = models.JSONField(default=list, blank=True, null=True)  
+    incorrectChoices = models.JSONField(default=list, blank=True, null=True)  
+
+    def check_answer(self, submitted_answer):
+        """
+        Accepts any of the following formats and validates order strictly:
+        - dict: {"0": 2, "1": 0} indices by blank position
+        - list[int]: [2, 0] indices by blank position
+        - list[str]: ["wordA", "wordB"] texts by blank position
+        """
+        try:
+            if not self.dragItems:
+                return False
+            target_texts = [str(item.get('text', '')).strip().lower() for item in self.dragItems]
+            num_targets = len(target_texts)
+
+            # Dict form of indices
+            if isinstance(submitted_answer, dict):
+                built = []
+                for i in range(num_targets):
+                    sel = submitted_answer.get(str(i))
+                    if sel is None:
+                        return False
+                    built.append(str(self.dragItems[int(sel)].get('text', '')).strip().lower())
+                return built == target_texts
+
+            # List form of indices
+            if isinstance(submitted_answer, list) and all(isinstance(x, (int, str)) for x in submitted_answer):
+                # If values are strings but numeric, treat as indices
+                try:
+                    idx_list = [int(x) for x in submitted_answer]
+                    if len(idx_list) != num_targets:
+                        return False
+                    built = [str(self.dragItems[i].get('text', '')).strip().lower() for i in idx_list]
+                    return built == target_texts
+                except (ValueError, TypeError):
+                    # Fallback to text comparison if not all indices
+                    pass
+
+            # List form of texts
+            if isinstance(submitted_answer, list) and all(isinstance(x, str) for x in submitted_answer):
+                texts = [str(x).strip().lower() for x in submitted_answer]
+                if len(texts) != num_targets:
+                    return False
+                return texts == target_texts
+        except Exception:
+            return False
+        return False
+
+    def compute_score(self, submitted_answer, meta=None):
+        wrong_attempts = 0
+        if isinstance(meta, dict):
+            try:
+                wrong_attempts = max(0, int(meta.get('wrong_attempts', 0)))
+            except (ValueError, TypeError):
+                wrong_attempts = 0
+        return max(0.0, 100.0 - (wrong_attempts * 10.0))
+
+class PictureWordQuestion(DrillQuestionBase):
+    drill_type = "P"
+    pictureWord = models.JSONField(default=list, blank=True, null=True)  
+    answer = models.CharField(max_length=200, blank=True, null=True)  
+
+    def check_answer(self, submitted_answer):
+        if not isinstance(submitted_answer, str) or not self.answer:
+            return False
+        return submitted_answer.strip().lower() == self.answer.strip().lower()
+
+    def compute_score(self, submitted_answer, meta=None):
+        wrong_attempts = 0
+        if isinstance(meta, dict):
+            try:
+                wrong_attempts = max(0, int(meta.get('wrong_attempts', 0)))
+            except (ValueError, TypeError):
+                wrong_attempts = 0
+        return max(0.0, 100.0 - (wrong_attempts * 10.0))
+
+class MemoryGameQuestion(DrillQuestionBase):
+    drill_type = "G"
+    memoryCards = models.JSONField(default=list, blank=True, null=True) 
+
+    def check_answer(self, submitted_answer):
+        """
+        For memory game, submitted_answer is expected to be a list of card IDs selected/matched.
+        We consider it correct when all cards are matched without duplicates.
+        """
+        if not isinstance(submitted_answer, list) or not self.memoryCards:
+            return False
+        memory_card_ids = set()
+        for card in self.memoryCards:
+            cid = card.get('id')
+            if cid is not None:
+                memory_card_ids.add(str(cid))
+        submitted_ids = [str(x) for x in submitted_answer]
+        # no duplicates and covers all
+        return len(submitted_ids) == len(set(submitted_ids)) and set(submitted_ids) == memory_card_ids
+
+    # implementation of the abstract method since memory game has built-in scoring rule
+    def compute_score(self, submitted_answer, meta=None):
+        """
+        Score = 100 - 5 * incorrect_pairings,
+        where incorrect_pairings = max(0, attempts - expected_pairs)
+        """
+        attempts = 0
+        if isinstance(meta, dict):
+            try:
+                attempts = int(meta.get('attempts', 0))
+            except (ValueError, TypeError):
+                attempts = 0
+        expected_pairs = 0
+        if isinstance(self.memoryCards, list):
+            try:
+                expected_pairs = max(0, int(len(self.memoryCards) // 2))
+            except Exception:
+                expected_pairs = 0
+        incorrect_pairings = max(0, attempts - expected_pairs)
+        return max(0.0, 100.0 - (incorrect_pairings * 5.0))
 
 class DrillChoice(models.Model):
   id = models.AutoField(primary_key=True)
-  question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='choices')
+  # Legacy FK (kept for transition). New generic link supports subclass questions.
+  content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
+  object_id = models.PositiveIntegerField(null=True, blank=True)
+  question_generic = GenericForeignKey('content_type', 'object_id')
   text = models.CharField(max_length=200, blank=True)
   image = models.ImageField(upload_to='drill_choices/images/', null=True, blank=True)
   video = models.FileField(upload_to='drill_choices/videos/', null=True, blank=True)
@@ -386,7 +832,11 @@ class DrillResult(models.Model):
 class MemoryGameResult(models.Model):
     id = models.AutoField(primary_key=True)
     drill_result = models.ForeignKey(DrillResult, on_delete=models.CASCADE, related_name='memory_game_results')
-    question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='memory_game_results')
+
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    question_generic = GenericForeignKey('content_type', 'object_id')
+
     attempts = models.IntegerField(default=0)
     matches = models.JSONField(default=list)  # Store matched pairs
     time_taken = models.FloatField()  # Time taken in seconds
@@ -395,7 +845,12 @@ class MemoryGameResult(models.Model):
 class QuestionResult(models.Model):
     id = models.AutoField(primary_key=True)
     drill_result = models.ForeignKey(DrillResult, on_delete=models.CASCADE, related_name='question_results')
-    question = models.ForeignKey(DrillQuestion, on_delete=models.CASCADE, related_name='question_results')
+    
+    # New generic link to subclass questions
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
+    object_id = models.PositiveIntegerField(null=True, blank=True)
+    question_generic = GenericForeignKey('content_type', 'object_id')
+    
     submitted_answer = models.JSONField(null=True, blank=True) # Store the student's submitted answer (flexible format)
     is_correct = models.BooleanField(default=False) # stores a student's result for a specific question within a drill run
     time_taken = models.FloatField(null=True, blank=True) # Time taken to answer this specific question (optional)
@@ -403,7 +858,7 @@ class QuestionResult(models.Model):
     points_awarded = models.FloatField(default=0) # Points awarded for this specific question
 
     class Meta:
-        unique_together = ('drill_result', 'question'); # Ensure a student only has one result per question per drill run
+        unique_together = ('drill_result', 'content_type', 'object_id'); 
 
 class TransferRequest(models.Model):
     STATUS_CHOICES = [
