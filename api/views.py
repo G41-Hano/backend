@@ -1272,9 +1272,8 @@ class DrillResultListView(generics.ListAPIView):
                 # Teacher can see all results for their drill
                 return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
             elif user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
-                # Student can see all results for drills in their classroom
-               return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
-                # return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
+                # Students should only see their own results for this drill
+                return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
             else:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("You do not have permission to view results for this drill.")
