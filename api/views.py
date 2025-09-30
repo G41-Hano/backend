@@ -1272,12 +1272,73 @@ class DrillResultListView(generics.ListAPIView):
                 # Teacher can see all results for their drill
                 return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
             elif user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
-                # Student can see all results for drills in their classroom
-               return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
-                # return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
+                # Students should only see their own results for this drill
+                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results') #use this one for leaderboards
+                # return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results') and use this one for specific student's results
             else:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("You do not have permission to view results for this drill.")
+        except Drill.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Drill not found.")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+class DrillResultsForDrillView(generics.ListAPIView):
+    serializer_class = DrillResultSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        drill_id = self.kwargs['drill_id']
+        user = self.request.user
+        try:
+            drill = Drill.objects.get(id=drill_id)
+            # Teachers: all results for their drill
+            if user.role.name == 'teacher' and drill.created_by == user:
+                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
+            # Students: allow viewing all results for leaderboard if enrolled in classroom
+            if user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
+                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to view results for this drill.")
+        except Drill.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound("Drill not found.")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+class DrillResultsForStudentView(generics.ListAPIView):
+    serializer_class = DrillResultSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        drill_id = self.kwargs['drill_id']
+        user = self.request.user
+        student_id_param = self.request.query_params.get('student_id')
+        try:
+            drill = Drill.objects.get(id=drill_id)
+            # Teacher may request a specific student's results
+            if user.role.name == 'teacher' and drill.created_by == user:
+                qs = DrillResult.objects.filter(drill_id=drill_id)
+                if student_id_param:
+                    try:
+                        qs = qs.filter(student_id=int(student_id_param))
+                    except (TypeError, ValueError):
+                        qs = qs.none()
+                else:
+                    qs = qs.none()
+                return qs.select_related('student').prefetch_related('question_results')
+            # Student: only own results if enrolled
+            if user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
+                return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results')
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You do not have permission to view results for this drill.")
         except Drill.DoesNotExist:
             from rest_framework.exceptions import NotFound
             raise NotFound("Drill not found.")
