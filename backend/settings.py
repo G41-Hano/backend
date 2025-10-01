@@ -86,7 +86,7 @@ INSTALLED_APPS = [
     "api",
     "rest_framework",
     "corsheaders",
-
+    "storages",
 ]
 
 MIDDLEWARE = [
@@ -178,6 +178,28 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 # Ensure the media directory exists
 os.makedirs(MEDIA_ROOT, exist_ok=True)
+
+# AWS Configuration
+
+AWS_ACCESS_KEY_ID = config('S3_ACCESS_KEY')
+AWS_SECRET_ACCESS_KEY = config('S3_SECRET_KEY')
+
+# Basic Storage configuration for Amazon S3
+AWS_STORAGE_BUCKET_NAME = config('S3_BUCKET_NAME')
+AWS_S3_CUSTOM_DOMAIN = '%s.s3.amazonaws.com' % AWS_STORAGE_BUCKET_NAME
+AWS_S3_FILE_OVERWRITE = False
+
+STORAGES = {
+  # Media file (image and video) management
+  "default": {
+    "BACKEND": "storages.backends.s3boto3.S3StaticStorage",
+  },
+
+  # CSS and JS file management
+  "staticfiles": {
+    "BACKEND": "storages.backends.s3boto3.S3StaticStorage",
+  },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
