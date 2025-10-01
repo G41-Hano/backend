@@ -10,35 +10,37 @@ class Command(BaseCommand):
                 'name': "Pathfinder Prodigy",
                 'description': "Completed your first vocabulary drill.",
                 'image': "badges/badge1.png",
-                'points_required': 0,
+                'points_required': None,
                 'is_first_drill': True
             },
             {
                 'name': "Vocabulary Rookie",
-                'description': "Earned 10 points from drills!",
+                'description': "Completed 3 drills.",
                 'image': "badges/badge2.png",
-                'points_required': 10,
-                'is_first_drill': False
+                'points_required': None,
+                'is_first_drill': False,
+                'drills_completed_required': 3
             },
             {
                 'name': "Epic Achiever",
-                'description': "Earned 30 points from drills!",
+                'description': "Reached 1000+ points from drills!",
                 'image': "badges/badge3.png",
-                'points_required': 30,
+                'points_required': 1000,
                 'is_first_drill': False
             },
             {
                 'name': "The Noble Mind",
-                'description': "Earned 50 points from drills!",
+                'description': "Completed 5 drills.",
                 'image': "badges/badge4.png",
-                'points_required': 50,
-                'is_first_drill': False
+                'points_required': None,
+                'is_first_drill': False,
+                'drills_completed_required': 5
             },
             {
                 'name': "Knowledge Master",
-                'description': "Earned 100 points from drills!",
+                'description': "Reached 500+ points from drills!",
                 'image': "badges/badge5.png",
-                'points_required': 100,
+                'points_required': 500,
                 'is_first_drill': False
             }
         ]
