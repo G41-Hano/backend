@@ -10,8 +10,8 @@ class Command(BaseCommand):
                 'name': "Pathfinder Prodigy",
                 'description': "Completed your first vocabulary drill.",
                 'image': "badges/badge1.png",
-                'points_required': None,
-                'is_first_drill': True
+                'points_required': 100,
+                'is_first_drill': False
             },
             {
                 'name': "Vocabulary Rookie",
@@ -23,9 +23,9 @@ class Command(BaseCommand):
             },
             {
                 'name': "Epic Achiever",
-                'description': "Reached 1000+ points from drills!",
+                'description': "Reached 2000+ points from drills!",
                 'image': "badges/badge3.png",
-                'points_required': 1000,
+                'points_required': 2000,
                 'is_first_drill': False
             },
             {
@@ -38,27 +38,23 @@ class Command(BaseCommand):
             },
             {
                 'name': "Knowledge Master",
-                'description': "Reached 500+ points from drills!",
+                'description': "Reached 1000+ points from drills!",
                 'image': "badges/badge5.png",
-                'points_required': 500,
+                'points_required': 1000,
                 'is_first_drill': False
             }
         ]
 
-        # First, clear existing badges
-        Badge.objects.all().delete()
-        self.stdout.write('Cleared existing badges')
-
-        # Create new badges
+        # Create or update badges 
         for badge_data in badges_data:
-            badge, created = Badge.objects.get_or_create(
+            badge, created = Badge.objects.update_or_create(
                 name=badge_data['name'],
                 defaults=badge_data
             )
             if created:
                 self.stdout.write(self.style.SUCCESS(f'Created badge: {badge.name}'))
             else:
-                self.stdout.write(self.style.WARNING(f'Badge already exists: {badge.name}'))
+                self.stdout.write(self.style.SUCCESS(f'Updated badge: {badge.name}'))
 
         # Verify badges were created
         badge_count = Badge.objects.count()
