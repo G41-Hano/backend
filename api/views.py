@@ -607,11 +607,13 @@ class DrillListCreateView(generics.ListCreateAPIView):
         serializer_data = {
             'title': data.get('title'),
             'description': data.get('description'),
+            'open_date': data.get('open_date'),
             'deadline': data.get('deadline'),
             'classroom': data.get('classroom'),
             'status': data.get('status'),
             'questions_input': questions_input,
             'custom_wordlist': data.get('custom_wordlist'),
+            'wordlist_name': data.get('wordlist_name'),
         }
         serializer = self.get_serializer(data=serializer_data, context={'request': request})
         serializer.is_valid(raise_exception=True)
@@ -636,6 +638,32 @@ class DrillRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
         else:
             # Students can access drills from their classrooms
             return Drill.objects.filter(classroom__students=user)
+
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        user = request.user
+        
+        # For students, check if the drill is available based on open_date and deadline
+        if user.role.name == 'student':
+            from django.utils import timezone
+            now = timezone.now()
+            
+            # Check if drill is not yet open
+            if instance.open_date and now < instance.open_date:
+                return Response(
+                    {"error": "This drill is not yet available. It will open at " + instance.open_date.strftime("%Y-%m-%d %H:%M")},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if drill has expired
+            if instance.deadline and now > instance.deadline:
+                return Response(
+                    {"error": "This drill has expired. The deadline was " + instance.deadline.strftime("%Y-%m-%d %H:%M")},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
 
     def perform_destroy(self, instance):
         # Only allow the creator (teacher) to delete
