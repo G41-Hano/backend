@@ -6,206 +6,206 @@
     {
       "word": "backpack",
       "definition": "a bag you wear on your back, with straps over your shoulders",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/backpack.png",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/backpack.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/backpack.png",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/backpack.mp4"
     },
     {
       "word": "purse",
       "definition": "a container used for carrying money and small personal items or accessories (especially by women)",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/purse.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/purse.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/purse.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/purse.mp4"
     },
     {
       "word": "swimsuit",
       "definition": "tight fitting garment worn for swimming",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/swimsuit.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/swimsuit.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/swimsuit.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/swimsuit.mp4"
     },
     {
       "word": "raincoat",
       "definition": "a coat that protects you from getting drenched in the rain",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/raincoat.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/raincoat.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/raincoat.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/raincoat.mp4"
     },
     {
       "word": "tie",
       "definition": "a thin piece of cloth that's knotted around the neck",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/tie.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/tie.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/tie.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/tie.mp4"
     },
     {
       "word": "belt",
       "definition": "an accessory you wear around your waist that helps hold your pants up",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/belt.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/belt.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/belt.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/belt.mp4"
     },
     {
       "word": "glasses",
       "definition": "what you wear to help you see better if you have less than perfect eyesight",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/glasses.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/glasses.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/glasses.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/glasses.mp4"
     },
     {
       "word": "ring",
       "definition": "jewelry consisting of precious metal (often set with jewels) worn on the finger",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/ring.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/ring.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/ring.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/ring.mp4"
     },
     {
       "word": "blouse",
       "definition": "a shirt or top usually worn by a woman",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/blouse.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/blouse.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/blouse.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/blouse.mp4"
     },
     {
       "word": "glove",
       "definition": "a piece of clothing that you wear on your hand, to protect it or keep it warm.",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/glove.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/glove.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/glove.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/glove.mp4"
     },
     {
       "word": "scarf",
       "definition": "a wide piece of fabric that's worn around the neck or over the head",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/scarf.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/scarf.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/scarf.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/scarf.mp4"
     },
     {
       "word": "boot",
       "definition": "kind of shoe that can be as high as your knee",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/boot.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/boot.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/boot.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/boot.mp4"
     },
     {
       "word": "trousers",
       "definition": "two-legged piece of clothing you wear on the bottom half of your body",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/trousers.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/trousers.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/trousers.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/trousers.mp4"
     },
     {
       "word": "bracelet",
       "definition": "jewelry worn around the wrist for decoration",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/bracelet.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/bracelet.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/bracelet.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/bracelet.mp4"
     },
     {
       "word": "hat",
       "definition": "headdress that protects the head from bad weather; has shaped crown and usually a brim",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/hat.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/hat.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/hat.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/hat.mp4"
     },
     {
       "word": "shoes",
       "definition": "footwear shaped to fit the foot (below the ankle)",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/shoes.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/shoes.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/shoes.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/shoes.mp4"
     },
     {
       "word": "jacket",
       "definition": "a lightweight or shorter version of a coat",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/jacket.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/jacket.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/jacket.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/jacket.mp4"
     },
     {
       "word": "shorts",
       "definition": "trousers that end at or above the knee",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/shorts.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/shorts.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/shorts.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/shorts.mp4"
     },
     {
       "word": "T-shirt",
       "definition": "a casual, collarless shirt",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/T-shirt.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/T-shirt.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/T-shirt.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/T-shirt.mp4"
     },
     {
       "word": "jeans",
       "definition": "close-fitting trousers of heavy denim for manual work or casual wear",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/jeans.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/jeans.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/jeans.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/jeans.mp4"
     },
     {
       "word": "skirt",
       "definition": "a garment hanging from the waist; worn mainly by girls and women",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/skirt.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/skirt.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/skirt.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/skirt.mp4"
     },
     {
       "word": "umbrella",
       "definition": "gizmo used to protect yourself from rain or sun",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/umbrella.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/umbrella.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/umbrella.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/umbrella.mp4"
     },
     {
       "word": "clothes",
       "definition": "clothing in general, made of cloth or fabric",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/clothes.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/clothes.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/clothes.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/clothes.mp4"
     },
     {
       "word": "jewelry",
       "definition": "an accessory (as a bracelet or ring or necklace) made of precious metals and set with gems",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/jewelry.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/jewelry.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/jewelry.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/jewelry.mp4"
     },
     {
       "word": "sock",
       "definition": "a piece of clothing you wear on your foot, under your shoe, and usually come in pairs",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/sock.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/sock.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/sock.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/sock.mp4"
     },
     {
       "word": "coat",
       "definition": "a warm piece of clothing you wear when it's cold outside",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/coat.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/coat.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/coat.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/coat.mp4"
     },
     {
       "word": "jumper",
       "definition": "a sleeveless dress resembling an apron; worn over other clothing",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/jumper.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/jumper.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/jumper.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/jumper.mp4"
     },
     {
       "word": "suit",
       "definition": "jacket and pants that match, well-suited for formal events",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/suit.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/suit.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/suit.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/suit.mp4"
     },
     {
       "word": "wallet",
       "definition": "a pocket-size case for holding papers and paper money",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/wallet.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/wallet.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/wallet.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/wallet.mp4"
     },
     {
       "word": "sunglasses",
       "definition": "glasses that are darkened to protect the eyes from the glare of the sun",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/sunglasses.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/sunglasses.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/sunglasses.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/sunglasses.mp4"
     },
     {
       "word": "watch",
       "definition": "a small portable device for keeping time",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/watch.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/watch.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/watch.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/watch.mp4"
     },
     {
       "word": "dress",
       "definition": "one-piece shirt and skirt combo that can be fancy or plain",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/dress.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/dress.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/dress.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/dress.mp4"
     },
     {
       "word": "sweater",
       "definition": "crocheted or knitted garment covering the upper part of the body",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/sweater.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/sweater.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/sweater.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/sweater.mp4"
     },
     {
       "word": "earring",
       "definition": "jewelry you wear on your ear",
-      "image_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/images/earring.jpg",
-      "video_url": "http://127.0.0.1:8000/media/vocabulary/clothes-and-accessories/videos/earring.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/earring.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/earring.mp4"
     }
   ]
 }
