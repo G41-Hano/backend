@@ -6,7 +6,7 @@ from django.utils.html import strip_tags
 from rest_framework import generics, viewsets, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer, TransferRequestSerializer, NotificationSerializer, DrillResultSerializer, BadgeSerializer
+from .serializers import UserSerializer, CustomTokenSerializer, ResetPasswordRequestSerializer, ResetPasswordSerializer, ClassroomSerializer, DrillSerializer, TransferRequestSerializer, NotificationSerializer, DrillResultSerializer, BadgeSerializer, ClassroomPointsSerializer
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -14,6 +14,7 @@ from rest_framework import status
 import secrets
 from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.exceptions import NotFound, PermissionDenied
 from django.core.files.storage import default_storage
 import pandas as pd
 from django.contrib.auth.hashers import make_password
@@ -1347,6 +1348,51 @@ class DrillResultsForStudentView(generics.ListAPIView):
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
+    
+class ClassroomPointsView(generics.RetrieveAPIView):
+    serializer_class = ClassroomPointsSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        from operator import itemgetter
+        classroom_id = self.kwargs['classroom_id']
+        user = self.request.user
+
+        # Check if classroom exists
+        try:
+            classroom = Classroom.objects.get(id=classroom_id)
+        except Classroom.DoesNotExist:
+            raise NotFound("Classroom not found.")
+
+        # Only allow teachers of this classroom or enrolled students to view leaderboard
+        if user.role.name == 'teacher' and classroom.created_by == user:
+            pass  # allowed
+        elif user.role.name == 'student':
+            if not classroom.students.filter(id=user.id).exists():
+                raise PermissionDenied("You are not enrolled in this classroom.")
+        else:
+            raise PermissionDenied("You do not have permission to view leaderboard.")
+
+        # Get all students in the classroom
+        students = classroom.students.all()
+        leaderboard = []
+        for student in students:
+            # Sum decrypted points for all DrillResults for this student in this classroom only
+            drill_results = DrillResult.objects.filter(student=student, drill__classroom=classroom)
+            total_points = sum([dr.points or 0 for dr in drill_results])
+            leaderboard.append({
+                'student_id': student.id,
+                'student_name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}",
+                'total_points': total_points
+            })
+
+        # Sort leaderboard by total_points descending
+        leaderboard = sorted(leaderboard, key=itemgetter('total_points'), reverse=True)
+
+        return {
+            "classroom_id": classroom.id,
+            "leaderboard": leaderboard
+        }
 
 # Add a view to submit answers for a single question
 class SubmitAnswerView(APIView):

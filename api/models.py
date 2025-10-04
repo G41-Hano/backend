@@ -90,7 +90,9 @@ class User(AbstractUser): # inherit AbstractUser
         for badge in point_badges:
             # Special case for Pathfinder Prodigy badge
             if badge.name == 'Pathfinder Prodigy':
-                if (previous_points < 100 and self.total_points >= 100 and self.total_points < 1000):
+                # Only award if points in [100, 1000)
+                points_in_range = (previous_points < 100 and self.total_points >= 100 and self.total_points < 1000)
+                if points_in_range:
                     new_badges.add(badge)
             # For other point-based badges
             elif previous_points < badge.points_required <= self.total_points:

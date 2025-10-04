@@ -537,6 +537,13 @@ class MemoryGameResultSerializer(serializers.ModelSerializer):
         
         return data
     
+class ClassroomPointsSerializer(serializers.Serializer):
+    classroom_id = serializers.IntegerField()
+    leaderboard = serializers.ListField(
+        child=serializers.DictField(),
+        help_text="List of students with their total points, sorted by rank."
+    )
+    
 class TransferRequestSerializer(serializers.ModelSerializer):
     student_name = serializers.SerializerMethodField()
     from_classroom_name = serializers.SerializerMethodField()
