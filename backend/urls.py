@@ -7,7 +7,7 @@ from api.views import (
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
-    TransferRequestViewSet, NotificationViewSet, DrillResultListView, ClassroomPointsView, DrillResultsForDrillView, DrillResultsForStudentView, SubmitAnswerView, BadgeViewSet, upload_image, upload_video
+    TransferRequestViewSet, NotificationViewSet, DrillResultListView, ClassroomPointsView, DrillResultsForDrillView, DrillResultsForStudentView, SubmitAnswerView, BadgeViewSet, upload_image, upload_video, unread_badge_notifications
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView
@@ -78,6 +78,8 @@ urlpatterns = [
     path('api/badges/points-statistics/', BadgeViewSet.as_view({'get': 'points_statistics'}), name='points_statistics'),
     path('api/badges/all-student-points/', BadgeViewSet.as_view({'get': 'all_student_points'}), name='all_student_points'),
     path('api/badges/drill-statistics/', BadgeViewSet.as_view({'get': 'drill_statistics'}), name='drill_statistics'),
+
+    path('api/badges/unread-earned/', unread_badge_notifications, name='unread_badge_notifications'),
 
     # Upload Image and Video URLs
     path('api/upload-image/', upload_image, name='upload_image'),
