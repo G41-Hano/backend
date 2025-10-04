@@ -338,12 +338,12 @@ class DrillSerializer(serializers.ModelSerializer):
     questions_input = serializers.ListField(write_only=True, required=False)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
     custom_wordlist = serializers.PrimaryKeyRelatedField(queryset=WordList.objects.all(), required=False, allow_null=True)
-    wordlist_name = serializers.SerializerMethodField()
+    wordlist_name = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     wordlist_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Drill
-        fields = ['id', 'title', 'description', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id', 'created_at']
+        fields = ['id', 'title', 'description', 'open_date', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id', 'created_at']
 
     def get_questions(self, obj):
         # Read questions from new subclass models and shape a unified payload
@@ -453,22 +453,18 @@ class DrillSerializer(serializers.ModelSerializer):
 
         return result
 
-    def get_wordlist_name(self, obj):
-        if obj.custom_wordlist:
-            return obj.custom_wordlist.name
-
-        return None
-
     def get_wordlist_id(self, obj):
         if obj.custom_wordlist:
             return obj.custom_wordlist.id
-     
+        elif obj.wordlist_name:
+            return obj.wordlist_name
         return None
 
     def create(self, validated_data):
         request = self.context.get('request')
         questions_data = validated_data.pop('questions_input', [])
         custom_wordlist = validated_data.pop('custom_wordlist', None)
+        wordlist_name = validated_data.pop('wordlist_name', None)
 
         if isinstance(questions_data, str):
             import json
@@ -477,7 +473,9 @@ class DrillSerializer(serializers.ModelSerializer):
         drill = Drill.objects.create(**validated_data)
         if custom_wordlist:
             drill.custom_wordlist = custom_wordlist
-            drill.save()
+        if wordlist_name:
+            drill.wordlist_name = wordlist_name
+        drill.save()
 
         drill.create_with_questions(questions_data, request=request)
         return drill

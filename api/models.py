@@ -249,11 +249,13 @@ class Drill(models.Model):
     title = models.CharField(max_length=50)
     description = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    deadline = models.DateTimeField()
+    open_date = models.DateTimeField()  
+    deadline = models.DateTimeField()   
     total_run = models.PositiveIntegerField(default=1)  # how many times the student will take the drill 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drills')
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='drills')
     custom_wordlist = models.ForeignKey('WordList', on_delete=models.SET_NULL, null=True, blank=True, related_name='drills', default=None)
+    wordlist_name = models.CharField(blank=True, help_text='Name of built-in wordlist used for this drill', max_length=100, null=True)
     STATUS_CHOICES = [
         ('draft', 'Draft'),
         ('published', 'Published'),
