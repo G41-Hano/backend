@@ -2002,3 +2002,36 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
                 {"error": f"Error retrieving drill statistics: {str(e)}"}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def unread_badge_notifications(request):
+    """
+    Returns unread badge-earned notifications for the current user.
+    """
+    notifications = Notification.objects.filter(
+        recipient=request.user,
+        type='badge_earned',
+        is_read=False
+    )
+
+    # Attach badge info to each notification, order by badge id ascending
+    badge_notifications = []
+    from .models import Badge
+    from .serializers import BadgeSerializer
+    for notif in notifications:
+        badge_id = notif.data.get('badge_id') if notif.data else None
+        badge = Badge.objects.filter(id=badge_id).first() if badge_id else None
+        badge_data = BadgeSerializer(badge, context={'request': request}).data if badge else None
+        badge_notifications.append({
+            'id': notif.id,
+            'type': notif.type,
+            'message': notif.message,
+            'data': notif.data,
+            'is_read': notif.is_read,
+            'created_at': notif.created_at,
+            'badge': badge_data
+        })
+    # Sort by badge id ascending (if badge exists)
+    badge_notifications.sort(key=lambda n: n['badge']['id'] if n['badge'] and n['badge'].get('id') is not None else float('inf'))
+    return Response(badge_notifications)
