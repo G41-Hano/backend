@@ -353,13 +353,46 @@ class DrillSerializer(serializers.ModelSerializer):
 
         # Helper to add common fields
         def base_payload(q, qtype):
-            return {
+            payload = {
                 'id': q.id,
                 'text': getattr(q, 'text', None),
                 'type': qtype,
                 'word': getattr(q, 'word', None),
                 'definition': getattr(q, 'definition', None),
             }
+            
+            # For built-in drills (no custom_wordlist), try to find media URLs
+            if not obj.custom_wordlist and q.word:
+                import os
+                import json
+                from django.conf import settings
+                
+                # Try to find which built-in wordlist contains this word
+                wordlist_dir = os.path.join(settings.BASE_DIR, 'api', 'word-lists')
+                if os.path.exists(wordlist_dir):
+                    for filename in os.listdir(wordlist_dir):
+                        if filename.endswith('.json'):
+                            try:
+                                wordlist_file = os.path.join(wordlist_dir, filename)
+                                with open(wordlist_file, 'r', encoding='utf-8') as f:
+                                    wordlist_data = json.load(f)
+                                
+                                # Check if this word exists in this wordlist
+                                words = wordlist_data.get('words', [])
+                                matching_word = next((w for w in words if w.get('word', '').lower() == q.word.lower()), None)
+                                
+                                if matching_word:
+                                    # Found the wordlist! Add media URLs
+                                    if matching_word.get('image_url'):
+                                        payload['image'] = matching_word['image_url']
+                                    if matching_word.get('video_url'):
+                                        payload['signVideo'] = matching_word['video_url']
+                                    break  # Found the wordlist, no need to check others
+                            except Exception as e:
+                                print(f"Error reading wordlist {filename}: {e}")
+                                continue
+            
+            return payload
 
         # Smart Select
         for q in SmartSelectQuestion.objects.filter(drill=obj):
