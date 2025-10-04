@@ -33,7 +33,7 @@ class BadgeSerializer(serializers.ModelSerializer):
         model = Badge
         fields = [
             'id', 'name', 'description', 'image', 'image_url',
-            'points_required', 'is_first_drill', 'drills_completed_required',
+            'points_required', 'drills_completed_required',
             'correct_answers_required', 'progress', 'is_earned', 'earned_at',
             'requirement_type', 'requirement_value'
         ]
@@ -61,10 +61,6 @@ class BadgeSerializer(serializers.ModelSerializer):
                 is_correct=True
             ).count()
             return min(100, (correct_answers / obj.correct_answers_required * 100))
-        elif obj.is_first_drill:
-            first_drill_result = DrillResult.objects.filter(student=user).order_by('start_time').first()
-            if first_drill_result:
-                return min(100, (first_drill_result.points / 100 * 100))  # Assuming 100 points required for first drill
         return None
 
     def get_is_earned(self, obj):
@@ -86,9 +82,7 @@ class BadgeSerializer(serializers.ModelSerializer):
             return None
 
     def get_requirement_type(self, obj):
-        if obj.is_first_drill:
-            return 'first_drill_points'
-        elif obj.points_required is not None:
+        if obj.points_required is not None:
             return 'points'
         elif obj.drills_completed_required is not None:
             return 'drills_completed'
@@ -97,9 +91,7 @@ class BadgeSerializer(serializers.ModelSerializer):
         return None
 
     def get_requirement_value(self, obj):
-        if obj.is_first_drill:
-            return 100  # Points required for first drill
-        elif obj.points_required is not None:
+        if obj.points_required is not None:
             return obj.points_required
         elif obj.drills_completed_required is not None:
             return obj.drills_completed_required
