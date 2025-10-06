@@ -1828,8 +1828,7 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
         """Helper method to calculate points needed for next badge"""
         current_points = user.total_points
         next_badge = Badge.objects.filter(
-            points_required__gt=current_points,
-            is_first_drill=False
+            points_required__gt=current_points
         ).order_by('points_required').first()
         
         if next_badge:
@@ -1861,7 +1860,7 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
                     'description': badge.description,
                     'image': request.build_absolute_uri(badge.image.url) if badge.image else None,
                     'points_required': badge.points_required,
-                    'is_first_drill': badge.is_first_drill,
+                    # 'is_first_drill' removed
                     'drills_completed_required': badge.drills_completed_required,
                     'correct_answers_required': badge.correct_answers_required,
                     'earned_count': earned_count,
@@ -1900,7 +1899,7 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
                     'description': badge.description,
                     'image': request.build_absolute_uri(badge.image.url) if badge.image else None,
                     'points_required': badge.points_required,
-                    'is_first_drill': badge.is_first_drill,
+                    # 'is_first_drill' removed
                     'drills_completed_required': badge.drills_completed_required,
                     'correct_answers_required': badge.correct_answers_required,
                     'is_earned': badge.id in earned_badge_ids,

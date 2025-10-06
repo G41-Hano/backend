@@ -17,7 +17,7 @@ class Badge(models.Model):
     description = models.TextField()
     image = models.ImageField(upload_to='badges/', null=True, blank=True)
     points_required = models.IntegerField(null=True, blank=True)
-    is_first_drill = models.BooleanField(default=False)  # Special badge for first drill completion
+    # is_first_drill removed
     drills_completed_required = models.IntegerField(null=True, blank=True)
     correct_answers_required = models.IntegerField(null=True, blank=True)
 
@@ -80,7 +80,6 @@ class User(AbstractUser): # inherit AbstractUser
         # Check for point-based badges (including Pathfinder Prodigy)
         point_badges = Badge.objects.filter(
             points_required__isnull=False,
-            is_first_drill=False,
             drills_completed_required__isnull=True,
             correct_answers_required__isnull=True
         ).exclude(
@@ -88,13 +87,10 @@ class User(AbstractUser): # inherit AbstractUser
         )
 
         for badge in point_badges:
-            # Special case for Pathfinder Prodigy badge
+            # Pathfinder Prodigy: only award if points_required=100 and total_points is in [100, 1000)
             if badge.name == 'Pathfinder Prodigy':
-                # Only award if points in [100, 1000)
-                points_in_range = (previous_points < 100 and self.total_points >= 100 and self.total_points < 1000)
-                if points_in_range:
+                if badge.points_required == 100 and previous_points < 100 and 100 <= self.total_points < 1000:
                     new_badges.add(badge)
-            # For other point-based badges
             elif previous_points < badge.points_required <= self.total_points:
                 new_badges.add(badge)
 
@@ -105,7 +101,6 @@ class User(AbstractUser): # inherit AbstractUser
 
         drill_badges = Badge.objects.filter(
             drills_completed_required__isnull=False,
-            is_first_drill=False,
             points_required__isnull=True,
             correct_answers_required__isnull=True
         ).exclude(
@@ -124,7 +119,6 @@ class User(AbstractUser): # inherit AbstractUser
 
         correct_badges = Badge.objects.filter(
             correct_answers_required__isnull=False,
-            is_first_drill=False,
             points_required__isnull=True,
             drills_completed_required__isnull=True
         ).exclude(
@@ -154,17 +148,7 @@ class User(AbstractUser): # inherit AbstractUser
 
         return new_badges
 
-    def award_first_drill_badge(self):
-        """Award badge for completing first drill with required points"""
-        first_drill_badge = Badge.objects.filter(is_first_drill=True).first()
-        if first_drill_badge and not self.badges.filter(is_first_drill=True).exists():
-            # Check if the student has earned the required points in their first drill
-            first_drill_result = DrillResult.objects.filter(student=self).order_by('start_time').first()
-            if first_drill_result and first_drill_badge.points_required is not None:
-                if first_drill_result.points >= first_drill_badge.points_required:
-                    self.badges.add(first_drill_badge)
-                    return first_drill_badge
-        return None
+    # award_first_drill_badge removed
 
 class Role(models.Model):
   STUDENT = 'student'
@@ -804,22 +788,7 @@ class DrillResult(models.Model):
         if self.points is None or self.points != total_points:
             self.points = total_points
             super().save(update_fields=['_points_encrypted'])
-        if is_new:  # Only process badges for new drill results
-            # Check if this is the student's first drill
-            if self.student.drill_results.count() == 1:
-                first_drill_badge = self.student.award_first_drill_badge()
-                if first_drill_badge:
-                    Notification.objects.create(
-                        recipient=self.student,
-                        type='badge_earned',
-                        message=f"Congratulations! You've earned the {first_drill_badge.name} badge!",
-                        data={
-                            'badge_id': first_drill_badge.id,
-                            'badge_name': first_drill_badge.name,
-                            'badge_description': first_drill_badge.description,
-                            'badge_image': first_drill_badge.image.url if first_drill_badge.image else None
-                        }
-                    )
+        # Removed first drill badge logic
             # Update points and check for badges
             self.student.update_points_and_badges(self.points)
     
