@@ -114,8 +114,8 @@
     {
       "word": "T-shirt",
       "definition": "a casual, collarless shirt",
-      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/T-shirt.jpg",
-      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/T-shirt.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/tshirt.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/tshirt.mp4"
     },
     {
       "word": "jeans",
@@ -204,8 +204,8 @@
     {
       "word": "earring",
       "definition": "jewelry you wear on your ear",
-      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/earring.jpg",
-      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/earring.mp4"
+      "image_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/images/earrings.jpg",
+      "video_url": "https://hano--g41.s3.ap-southeast-2.amazonaws.com/built-in/clothes-and-accessories/videos/earrings.mp4"
     }
   ]
 }
