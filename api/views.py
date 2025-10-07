@@ -753,99 +753,6 @@ class DrillRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-class MemoryGameSubmissionView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request, drill_id, question_id):
-        try:
-            # Get the drill and question
-            drill = Drill.objects.get(id=drill_id)
-            # Find the question in the appropriate subclass model
-            question = None
-            for model_cls in [SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion]:
-                try:
-                    question = model_cls.objects.get(id=question_id, drill=drill)
-                    break
-                except model_cls.DoesNotExist:
-                    continue
-            
-            if not question:
-                return Response(
-                    {"error": "Question not found"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            
-            if question.type != 'G':
-                return Response(
-                    {"error": "Question is not a memory game type"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            # Get or create drill result
-            drill_result, created = DrillResult.objects.get_or_create(
-                student=request.user,
-                drill=drill,
-                defaults={
-                    'run_number': 1,
-                    'completion_time': timezone.now(),
-                    'points': 0
-                }
-            )
-            
-            if not created:
-                drill_result.run_number += 1
-                drill_result.completion_time = timezone.now()
-                drill_result.save()
-            
-            # Use frontend-calculated score as the single source of truth
-            attempts = request.data.get('attempts', 0)
-            matches = request.data.get('matches', [])
-            frontend_score = request.data.get('points', 0)
-            try:
-                score = float(frontend_score)
-            except (ValueError, TypeError):
-                score = 0.0
-            
-            # Create memory game result
-            memory_result = MemoryGameResult.objects.create(
-                drill_result=drill_result,
-                question=question,
-                attempts=attempts,
-                matches=matches,
-                score=score
-            )
-            
-            # Update drill result points
-          #  drill_result.points = score
-            total_points_for_run = drill_result.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
-            drill_result.points = total_points_for_run
-            drill_result.save()
-            
-            # Update user's total points and check for badges
-            request.user.update_points_and_badges(total_points_for_run)
-            
-            return Response({
-                'success': True,
-                'score': score,
-                'attempts': attempts,
-            })
-            
-        except Drill.DoesNotExist:
-            return Response(
-                {"error": "Drill not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {"error": "Question not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
 # Profile View
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1539,6 +1446,7 @@ class SubmitAnswerView(APIView):
                     'points_awarded': points_to_award
                 }
             )
+            print(f"QuestionResult {'created' if created else 'updated'} - ID: {question_result.id}, Points awarded: {question_result.points_awarded}")
             print(f"QuestionResult {'created' if created else 'updated'} with ID {question_result.id}")
 
             # Update overall points on DrillResult

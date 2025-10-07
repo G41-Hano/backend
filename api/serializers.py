@@ -1,9 +1,7 @@
 from rest_framework import serializers
 from .models import *
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .utils.encryption import encrypt, decrypt
 from collections import Counter
-from urllib.parse import urlparse
 import os
 
 # Serializers that convert the Django Object to JSON, and vice versa
@@ -200,131 +198,6 @@ class ClassroomSerializer(serializers.ModelSerializer):
         validated_data['teacher'] = teacher
         return super().create(validated_data)
 
-class DrillChoiceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = DrillChoice
-        fields = ['id', 'text', 'image', 'video', 'is_correct']
-
-class DrillQuestionSerializer(serializers.ModelSerializer):
-    choices = DrillChoiceSerializer(many=True, read_only=True)
-    # Add other fields similar to DrillDrillQuestionSerializer
-    pattern = serializers.CharField(required=False, allow_null=True)
-    hint = serializers.CharField(required=False, allow_null=True)
-    letterChoices = serializers.JSONField(required=False)
-    sentence = serializers.CharField(required=False, allow_null=True)
-    dragItems = serializers.JSONField(required=False)
-    incorrectChoices = serializers.JSONField(required=False)
-    dropZones = serializers.JSONField(required=False)
-    blankPosition = serializers.IntegerField(required=False, allow_null=True)
-    memoryCards = serializers.JSONField(required=False)
-    pictureWord = serializers.JSONField(required=False)
-    answer = serializers.CharField(required=False, allow_null=True)
-    
-    # Add word and definition fields
-    word = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-    definition = serializers.CharField(required=False, allow_blank=True, allow_null=True)
-
-    class Meta:
-        model = DrillQuestionBase
-        fields = ['id', 'text', 'type', 'choices', 'pattern', 'hint', 'letterChoices', 'sentence', 'dragItems', 'incorrectChoices', 'dropZones', 'blankPosition', 'memoryCards', 'pictureWord', 'answer', 'word', 'definition']
-
-    def validate(self, data):
-        question_type = data.get('type')
-
-        if question_type == 'F':  # Blank Busters
-            if not data.get('pattern'):
-                raise serializers.ValidationError("Pattern is required for Blank Busters questions")
-            if not data.get('answer'):
-                raise serializers.ValidationError("Answer is required for Blank Busters questions")
-
-        elif question_type == 'D':  # Sentence Builder
-            if not data.get('sentence'):
-                raise serializers.ValidationError("Sentence is required for Sentence Builder questions")
-            if not data.get('dragItems'):
-                raise serializers.ValidationError("Drag items (correct answers) are required for Sentence Builder questions")
-            
-            # Validate sentence has blanks
-            if '_' not in data.get('sentence', ''):
-                raise serializers.ValidationError("Sentence must contain blanks marked with '_'")
-            
-            # Validate number of drag items matches number of blanks
-            blank_count = data['sentence'].count('_')
-            drag_items = data.get('dragItems', [])
-            if len(drag_items) != blank_count:
-                raise serializers.ValidationError(f"Number of drag items ({len(drag_items)}) must match number of blanks ({blank_count})")
-
-        elif data.get('type') == 'G':  # Memory Game type
-            if not data.get('memoryCards'):
-                raise serializers.ValidationError("Memory cards are required for memory game questions")
-            cards = data['memoryCards']
-            if not isinstance(cards, list):
-                raise serializers.ValidationError("Memory cards must be a list")
-            if len(cards) < 2:
-                raise serializers.ValidationError("At least 2 cards are required for a memory game")
-            if len(cards) % 2 != 0:
-                raise serializers.ValidationError("Number of cards must be even for matching pairs")
-            # Validate each card has required fields
-            for card in cards:
-                if not isinstance(card, dict):
-                    raise serializers.ValidationError("Each card must be an object")
-                if 'id' not in card or 'content' not in card or 'pairId' not in card:
-                    raise serializers.ValidationError("Each card must have id, content, and pairId fields")
-
-        elif data.get('type') == 'P':  # Picture Word type
-            if not data.get('pictureWord'):
-                raise serializers.ValidationError("Pictures are required for Picture Word questions")
-            pictures = data['pictureWord']
-            if not isinstance(pictures, list):
-                raise serializers.ValidationError("Pictures must be a list")
-            if len(pictures) != 4:
-                raise serializers.ValidationError("Exactly 4 pictures are required for Picture Word questions")
-            # Validate each picture has required fields
-            for pic in pictures:
-                if not isinstance(pic, dict):
-                    raise serializers.ValidationError("Each picture must be an object")
-                if 'id' not in pic:
-                    raise serializers.ValidationError("Each picture must have an id field")
-
-        return data
-
-    def get_word(self, obj):
-        # If the word is already set, use it
-        if hasattr(obj, 'word') and obj.word:
-            return obj.word
-        # If the drill is associated with a custom wordlist, find the word
-        if hasattr(obj, 'drill') and obj.drill and obj.drill.custom_wordlist:
-            words = obj.drill.custom_wordlist.words.all()
-            matching_words = words.filter(word__icontains=obj.answer or obj.text)
-            return matching_words.first().word if matching_words.exists() else None
-        
-        # For built-in wordlists, try to find the word
-        if hasattr(obj.drill, 'wordlistName'):
-            from .models import Vocabulary
-            builtin_words = Vocabulary.objects.filter(list__name=obj.drill.wordlistName)
-            matching_words = builtin_words.filter(word__icontains=obj.answer or obj.text)
-            return matching_words.first().word if matching_words.exists() else None
-        
-        return None
-
-    def get_definition(self, obj):
-        # If the definition is already set, use it
-        if hasattr(obj, 'definition') and obj.definition:
-            return obj.definition
-        # If the drill is associated with a custom wordlist, find the definition
-        if hasattr(obj, 'drill') and obj.drill and obj.drill.custom_wordlist:
-            words = obj.drill.custom_wordlist.words.all()
-            matching_words = words.filter(word__icontains=obj.answer or obj.text)
-            return matching_words.first().definition if matching_words.exists() else None
-        
-        # For built-in wordlists, try to find the definition
-        if hasattr(obj.drill, 'wordlistName'):
-            from .models import Vocabulary
-            builtin_words = Vocabulary.objects.filter(list__name=obj.drill.wordlistName)
-            matching_words = builtin_words.filter(word__icontains=obj.answer or obj.text)
-            return matching_words.first().definition if matching_words.exists() else None
-        
-        return None
-
 class DrillSerializer(serializers.ModelSerializer):
     questions = serializers.SerializerMethodField()
     questions_input = serializers.ListField(write_only=True, required=False)
@@ -338,112 +211,195 @@ class DrillSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'description', 'open_date', 'deadline', 'classroom', 'created_by', 'questions', 'questions_input', 'status', 'custom_wordlist', 'wordlist_name', 'wordlist_id', 'created_at']
 
     def get_questions(self, obj):
-        # Read questions from new subclass models and shape a unified payload
+        """
+        Serialize all questions for a drill by delegating to specific question type methods.
+        Maintains the same JSON structure for frontend compatibility.
+        """
         from .models import SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion
-        request = self.context.get('request')
+        
         result = []
-
-        # Helper to add common fields
-        def base_payload(q, qtype):
-            payload = {
-                'id': q.id,
-                'text': getattr(q, 'text', None),
-                'type': qtype,
-                'word': getattr(q, 'word', None),
-                'definition': getattr(q, 'definition', None),
-            }
-            
-            # For built-in drills (no custom_wordlist), try to find media URLs
-            if not obj.custom_wordlist and q.word:
-                import os
-                import json
-                from django.conf import settings
-                
-                # Try to find which built-in wordlist contains this word
-                wordlist_dir = os.path.join(settings.BASE_DIR, 'api', 'word-lists')
-                if os.path.exists(wordlist_dir):
-                    for filename in os.listdir(wordlist_dir):
-                        if filename.endswith('.json'):
-                            try:
-                                wordlist_file = os.path.join(wordlist_dir, filename)
-                                with open(wordlist_file, 'r', encoding='utf-8') as f:
-                                    wordlist_data = json.load(f)
-                                
-                                # Check if this word exists in this wordlist
-                                words = wordlist_data.get('words', [])
-                                matching_word = next((w for w in words if w.get('word', '').lower() == q.word.lower()), None)
-                                
-                                if matching_word:
-                                    # Found the wordlist! Add media URLs
-                                    if matching_word.get('image_url'):
-                                        payload['image'] = matching_word['image_url']
-                                    if matching_word.get('video_url'):
-                                        payload['signVideo'] = matching_word['video_url']
-                                    break  # Found the wordlist, no need to check others
-                            except Exception as e:
-                                print(f"Error reading wordlist {filename}: {e}")
-                                continue
-            
-            return payload
-
-        # Smart Select
-        for q in SmartSelectQuestion.objects.filter(drill=obj):
-            payload = base_payload(q, 'M')
-            payload['answer'] = q.answer
-            # choices via generic
-            choices = []
-            for c in q.choices_generic.all():
-                choices.append({
-                    'id': c.id,
-                    'text': c.text,
-                    'is_correct': c.is_correct,
-                    'image': request.build_absolute_uri(c.image.url) if request and c.image else (c.image.url if c.image else None),
-                    'video': request.build_absolute_uri(c.video.url) if request and c.video else (c.video.url if c.video else None),
-                })
-            payload['choices'] = choices
-            result.append(payload)
-
-        # Blank Busters
-        for q in BlankBustersQuestion.objects.filter(drill=obj):
-            payload = base_payload(q, 'F')
-            payload['letterChoices'] = q.letterChoices
-            payload['answer'] = q.answer
-            payload['pattern'] = q.pattern
-            payload['hint'] = q.hint
-            choices = []
-            for c in q.choices_generic.all():
-                choices.append({
-                    'id': c.id,
-                    'text': c.text,
-                    'is_correct': c.is_correct,
-                    'image': request.build_absolute_uri(c.image.url) if request and c.image else (c.image.url if c.image else None),
-                    'video': request.build_absolute_uri(c.video.url) if request and c.video else (c.video.url if c.video else None),
-                })
-            payload['choices'] = choices
-            result.append(payload)
-
-        # Sentence Builder
-        for q in SentenceBuilderQuestion.objects.filter(drill=obj):
-            payload = base_payload(q, 'D')
-            payload['sentence'] = q.sentence
-            payload['dragItems'] = q.dragItems
-            payload['incorrectChoices'] = q.incorrectChoices
-            result.append(payload)
-
-        # Picture Word
-        for q in PictureWordQuestion.objects.filter(drill=obj):
-            payload = base_payload(q, 'P')
-            payload['pictureWord'] = q.pictureWord
-            payload['answer'] = q.answer
-            result.append(payload)
-
-        # Memory Game
-        for q in MemoryGameQuestion.objects.filter(drill=obj):
-            payload = base_payload(q, 'G')
-            payload['memoryCards'] = q.memoryCards
-            result.append(payload)
-
+        
+        # Serialize each question type using dedicated methods
+        result.extend(self._serialize_smart_select_questions(obj))
+        result.extend(self._serialize_blank_busters_questions(obj))
+        result.extend(self._serialize_sentence_builder_questions(obj))
+        result.extend(self._serialize_picture_word_questions(obj))
+        result.extend(self._serialize_memory_game_questions(obj))
+        
         return result
+
+    def _base_payload(self, question, question_type, drill_obj):
+        """
+        Create base payload with common fields for all question types.
+        Includes wordlist media URL lookup for built-in drills.
+        """
+        payload = {
+            'id': question.id,
+            'text': getattr(question, 'text', None),
+            'type': question_type,
+            'word': getattr(question, 'word', None),
+            'definition': getattr(question, 'definition', None),
+        }
+        
+        # For built-in drills (no custom_wordlist), try to find media URLs
+        if not drill_obj.custom_wordlist and question.word:
+            media_urls = self._get_wordlist_media_urls(question.word)
+            payload.update(media_urls)
+        
+        return payload
+
+    def _get_wordlist_media_urls(self, word):
+        """
+        Look up media URLs for a word from built-in wordlists.
+        Returns dict with 'image' and 'signVideo' keys if found.
+        """
+        import os
+        import json
+        from django.conf import settings
+        
+        wordlist_dir = os.path.join(settings.BASE_DIR, 'api', 'word-lists')
+        if not os.path.exists(wordlist_dir):
+            return {}
+        
+        for filename in os.listdir(wordlist_dir):
+            if not filename.endswith('.json'):
+                continue
+                
+            try:
+                wordlist_file = os.path.join(wordlist_dir, filename)
+                with open(wordlist_file, 'r', encoding='utf-8') as f:
+                    wordlist_data = json.load(f)
+                
+                # Check if this word exists in this wordlist
+                words = wordlist_data.get('words', [])
+                matching_word = next(
+                    (w for w in words if w.get('word', '').lower() == word.lower()), 
+                    None
+                )
+                
+                if matching_word:
+                    # Found the wordlist! Return media URLs
+                    media_urls = {}
+                    if matching_word.get('image_url'):
+                        media_urls['image'] = matching_word['image_url']
+                    if matching_word.get('video_url'):
+                        media_urls['signVideo'] = matching_word['video_url']
+                    return media_urls
+                    
+            except Exception as e:
+                print(f"Error reading wordlist {filename}: {e}")
+                continue
+        
+        return {}
+
+    def _serialize_choices(self, question):
+        """
+        Serialize choices for questions that use DrillChoice objects.
+        Handles image and video URL building with request context.
+        """
+        request = self.context.get('request')
+        choices = []
+        
+        for choice in question.choices_generic.all():
+            choices.append({
+                'id': choice.id,
+                'text': choice.text,
+                'is_correct': choice.is_correct,
+                'image': self._get_media_url(choice.image, request),
+                'video': self._get_media_url(choice.video, request),
+            })
+        
+        return choices
+
+    def _get_media_url(self, media_field, request):
+        """
+        Get absolute URL for media field, handling both request context and direct URLs.
+        """
+        if not media_field:
+            return None
+        
+        if request:
+            return request.build_absolute_uri(media_field.url)
+        else:
+            return media_field.url if hasattr(media_field, 'url') else None
+
+    def _serialize_smart_select_questions(self, drill_obj):
+        """
+        Serialize SmartSelectQuestion (Multiple Choice) questions.
+        """
+        from .models import SmartSelectQuestion
+        
+        questions = []
+        for question in SmartSelectQuestion.objects.filter(drill=drill_obj):
+            payload = self._base_payload(question, 'M', drill_obj)
+            payload['answer'] = question.answer
+            payload['choices'] = self._serialize_choices(question)
+            questions.append(payload)
+        
+        return questions
+
+    def _serialize_blank_busters_questions(self, drill_obj):
+        """
+        Serialize BlankBustersQuestion (Fill-in-the-blank) questions.
+        """
+        from .models import BlankBustersQuestion
+        
+        questions = []
+        for question in BlankBustersQuestion.objects.filter(drill=drill_obj):
+            payload = self._base_payload(question, 'F', drill_obj)
+            payload['letterChoices'] = question.letterChoices
+            payload['answer'] = question.answer
+            payload['pattern'] = question.pattern
+            payload['hint'] = question.hint
+            payload['choices'] = self._serialize_choices(question)
+            questions.append(payload)
+        
+        return questions
+
+    def _serialize_sentence_builder_questions(self, drill_obj):
+        """
+        Serialize SentenceBuilderQuestion (Drag & Drop) questions.
+        """
+        from .models import SentenceBuilderQuestion
+        
+        questions = []
+        for question in SentenceBuilderQuestion.objects.filter(drill=drill_obj):
+            payload = self._base_payload(question, 'D', drill_obj)
+            payload['sentence'] = question.sentence
+            payload['dragItems'] = question.dragItems
+            payload['incorrectChoices'] = question.incorrectChoices
+            questions.append(payload)
+        
+        return questions
+
+    def _serialize_picture_word_questions(self, drill_obj):
+        """
+        Serialize PictureWordQuestion (Picture Selection) questions.
+        """
+        from .models import PictureWordQuestion
+        
+        questions = []
+        for question in PictureWordQuestion.objects.filter(drill=drill_obj):
+            payload = self._base_payload(question, 'P', drill_obj)
+            payload['pictureWord'] = question.pictureWord
+            payload['answer'] = question.answer
+            questions.append(payload)
+        
+        return questions
+
+    def _serialize_memory_game_questions(self, drill_obj):
+        """
+        Serialize MemoryGameQuestion (Memory Matching) questions.
+        """
+        from .models import MemoryGameQuestion
+        
+        questions = []
+        for question in MemoryGameQuestion.objects.filter(drill=drill_obj):
+            payload = self._base_payload(question, 'G', drill_obj)
+            payload['memoryCards'] = question.memoryCards
+            questions.append(payload)
+        
+        return questions
 
     def get_wordlist_id(self, obj):
         if obj.custom_wordlist:
