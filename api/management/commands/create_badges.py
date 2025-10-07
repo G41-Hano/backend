@@ -10,38 +10,33 @@ class Command(BaseCommand):
                 'name': "Pathfinder Prodigy",
                 'description': "Completed your first vocabulary drill.",
                 'image': "badges/badge1.png",
-                'points_required': 100,
-                'is_first_drill': False
+                'points_required': 100
             },
             {
                 'name': "Vocabulary Rookie",
                 'description': "Completed 3 drills.",
                 'image': "badges/badge2.png",
                 'points_required': None,
-                'is_first_drill': False,
                 'drills_completed_required': 3
             },
             {
                 'name': "Epic Achiever",
                 'description': "Reached 2000+ points from drills!",
                 'image': "badges/badge3.png",
-                'points_required': 2000,
-                'is_first_drill': False
+                'points_required': 2000
             },
             {
                 'name': "The Noble Mind",
                 'description': "Completed 5 drills.",
                 'image': "badges/badge4.png",
                 'points_required': None,
-                'is_first_drill': False,
                 'drills_completed_required': 5
             },
             {
                 'name': "Knowledge Master",
                 'description': "Reached 1000+ points from drills!",
                 'image': "badges/badge5.png",
-                'points_required': 1000,
-                'is_first_drill': False
+                'points_required': 1000
             }
         ]
 
