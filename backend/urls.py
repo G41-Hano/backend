@@ -7,7 +7,7 @@ from api.views import (
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
-    TransferRequestViewSet, NotificationViewSet, DrillResultListView, ClassroomPointsView, DrillResultsForDrillView, DrillResultsForStudentView, SubmitAnswerView, BadgeViewSet, upload_image, upload_video, unread_badge_notifications
+    TransferRequestViewSet, NotificationViewSet, ClassroomPointsView, DrillResultsForDrillView, DrillResultsForStudentView, SubmitAnswerView, BadgeViewSet, upload_image, upload_video, unread_badge_notifications
 )
 from api.viewsets.word_list import WordListView
 from api.viewsets.builtin_word_list import BuiltInWordListView, BuiltInWordListIndexView

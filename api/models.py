@@ -17,7 +17,6 @@ class Badge(models.Model):
     description = models.TextField()
     image = models.ImageField(upload_to='badges/', null=True, blank=True)
     points_required = models.IntegerField(null=True, blank=True)
-    # is_first_drill removed
     drills_completed_required = models.IntegerField(null=True, blank=True)
     correct_answers_required = models.IntegerField(null=True, blank=True)
 
@@ -737,7 +736,7 @@ class DrillResult(models.Model):
     id = models.AutoField(primary_key=True)
     student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drill_results')
     drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name='drill_results')
-    run_number = models.IntegerField(4) # how many times the student has taken the drill
+    run_number = models.IntegerField(4) 
     start_time = models.DateTimeField(auto_now_add=True)
     completion_time = models.DateTimeField()
 
@@ -788,8 +787,9 @@ class DrillResult(models.Model):
         if self.points is None or self.points != total_points:
             self.points = total_points
             super().save(update_fields=['_points_encrypted'])
-        # Removed first drill badge logic
-            # Update points and check for badges
+        
+        # Update points and check for badges (always call this after points are updated)
+        if self.points is not None:
             self.student.update_points_and_badges(self.points)
     
     def __init__(self, *args, **kwargs):
@@ -801,19 +801,6 @@ class DrillResult(models.Model):
             except Exception as e:
                 print(f"Error during __init__ decryption for DrillResult {self.id}: {e}")
                 self._points_decrypted_cache = None
-
-class MemoryGameResult(models.Model):
-    id = models.AutoField(primary_key=True)
-    drill_result = models.ForeignKey(DrillResult, on_delete=models.CASCADE, related_name='memory_game_results')
-
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE, null=True, blank=True)
-    object_id = models.PositiveIntegerField(null=True, blank=True)
-    question_generic = GenericForeignKey('content_type', 'object_id')
-
-    attempts = models.IntegerField(default=0)
-    matches = models.JSONField(default=list)  # Store matched pairs
-    time_taken = models.FloatField()  # Time taken in seconds
-    score = models.FloatField()  # Score based on attempts and time
 
 class QuestionResult(models.Model):
     id = models.AutoField(primary_key=True)
