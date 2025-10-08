@@ -451,37 +451,6 @@ class DrillSerializer(serializers.ModelSerializer):
             
         instance.update_with_questions(questions_data, request=request)
         return instance
-
-class MemoryGameResultSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = MemoryGameResult
-        fields = ['id', 'drill_result', 'question', 'attempts', 'matches', 'time_taken', 'score']
-        read_only_fields = ['id', 'drill_result']
-
-    def validate(self, data):
-        # Validate that matches are valid pairs
-        matches = data.get('matches', [])
-        if not isinstance(matches, list):
-            raise serializers.ValidationError("Matches must be a list")
-        
-        # Get the question's memory cards
-        question = data['question']
-        if question.type != 'G':
-            raise serializers.ValidationError("Question must be a memory game type")
-        
-        cards = question.memoryCards
-        valid_pairs = set()
-        for card in cards:
-            valid_pairs.add(frozenset([card['id'], card['pairId']]))
-        
-        # Validate each match
-        for match in matches:
-            if not isinstance(match, list) or len(match) != 2:
-                raise serializers.ValidationError("Each match must be a pair of card IDs")
-            if frozenset(match) not in valid_pairs:
-                raise serializers.ValidationError(f"Invalid match: {match}")
-        
-        return data
     
 class ClassroomPointsSerializer(serializers.Serializer):
     classroom_id = serializers.IntegerField()

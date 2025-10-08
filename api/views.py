@@ -1,5 +1,5 @@
 from django.shortcuts import render
-from .models import User, Role, PasswordReset, Classroom, Drill, DrillQuestionBase, DrillResult, MemoryGameResult, TransferRequest, Notification, QuestionResult, Badge, SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion
+from .models import User, Role, PasswordReset, Classroom, Drill, DrillQuestionBase, DrillResult, TransferRequest, Notification, QuestionResult, Badge, SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -79,10 +79,6 @@ class CheckEmailView(APIView):
             'message': 'This email address is already taken' if exists else 'This email address is available'
         })
 
-# class UserView(APIView):
-#   permission_classes = [IsAuthenticated]
-#   def get(self, request):
-#     return Response(UserSerializer(request.user).data)  # <- The user from the token
 
 class RequestPasswordReset(generics.GenericAPIView):
     permission_classes = [AllowAny]
@@ -252,17 +248,24 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                         drill__classroom=classroom
                     ).select_related('drill')
                     
-                    # Calculate total points using the best score for each drill
+                    # Calculate total points using the latest attempt for each drill
                     classroom_points = 0
-                    drill_scores = {}  # Track best scores per drill
+                    drill_scores = {}  # Track latest attempt scores per drill
                     
                     for result in drill_results:
                         drill_id = result.drill.id
-                        if drill_id not in drill_scores or result.points > drill_scores[drill_id]:
-                            drill_scores[drill_id] = result.points
+                        # Keep the latest attempt (highest run_number) for each drill
+                        if drill_id not in drill_scores or result.run_number > drill_scores[drill_id]['run_number']:
+                            drill_scores[drill_id] = {
+                                'points': result.points,
+                                'run_number': result.run_number
+                            }
                     
-                    # Sum up the best scores
-                    classroom_points = sum(drill_scores.values())
+                    # Sum up the latest attempt scores
+                    classroom_points = sum(score['points'] or 0 for score in drill_scores.values())
+                    
+                    # Convert drill_scores back to simple format for compatibility
+                    simple_drill_scores = {drill_id: score['points'] for drill_id, score in drill_scores.items()}
                     
                     leaderboard_data.append({
                         'id': student.id,
@@ -270,7 +273,7 @@ class ClassroomStudentsView(APIView): # enroll and delete students in a classroo
                         'last_name': student.get_decrypted_last_name(),
                         'avatar': request.build_absolute_uri(student.avatar.url) if student.avatar else None,
                         'points': classroom_points,
-                        'drill_scores': drill_scores  # Include drill scores for detailed view
+                        'drill_scores': simple_drill_scores  # Include drill scores for detailed view
                     })
                 
                 # Sort by points in descending order
@@ -1193,36 +1196,6 @@ def upload_video(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class DrillResultListView(generics.ListAPIView):
-    serializer_class = DrillResultSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        drill_id = self.kwargs['drill_id']
-        user = self.request.user
-        try:
-            drill = Drill.objects.get(id=drill_id)
-            
-            # Check if user has permission to view results
-            if user.role.name == 'teacher' and drill.created_by == user:
-                # Teacher can see all results for their drill
-                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results')
-            elif user.role.name == 'student' and drill.classroom.students.filter(id=user.id).exists():
-                # Students should only see their own results for this drill
-                return DrillResult.objects.filter(drill_id=drill_id).select_related('student').prefetch_related('question_results') #use this one for leaderboards
-                # return DrillResult.objects.filter(drill_id=drill_id, student=user).select_related('student').prefetch_related('question_results') and use this one for specific student's results
-            else:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied("You do not have permission to view results for this drill.")
-        except Drill.DoesNotExist:
-            from rest_framework.exceptions import NotFound
-            raise NotFound("Drill not found.")
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
-
 class DrillResultsForDrillView(generics.ListAPIView):
     serializer_class = DrillResultSerializer
     permission_classes = [IsAuthenticated]
@@ -1312,9 +1285,22 @@ class ClassroomPointsView(generics.RetrieveAPIView):
         students = classroom.students.all()
         leaderboard = []
         for student in students:
-            # Sum decrypted points for all DrillResults for this student in this classroom only
+            # Get latest attempt points for each drill in this classroom
             drill_results = DrillResult.objects.filter(student=student, drill__classroom=classroom)
-            total_points = sum([dr.points or 0 for dr in drill_results])
+            
+            # Group by drill and get the latest attempt (highest run_number) for each drill
+            drill_latest_scores = {}
+            for result in drill_results:
+                drill_id = result.drill.id
+                if drill_id not in drill_latest_scores or result.run_number > drill_latest_scores[drill_id]['run_number']:
+                    drill_latest_scores[drill_id] = {
+                        'points': result.points,
+                        'run_number': result.run_number
+                    }
+            
+            # Sum up the latest attempt scores
+            total_points = sum(score['points'] or 0 for score in drill_latest_scores.values())
+            
             leaderboard.append({
                 'student_id': student.id,
                 'student_name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}",
@@ -1390,27 +1376,100 @@ class SubmitAnswerView(APIView):
             if submitted_answer_data is None:
                  return Response({"error": "Answer data is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Get or create the overall DrillResult for this student and drill run
-            drill_result, created = DrillResult.objects.get_or_create(
-                student=user,
-                drill=drill,
-                defaults={
-                    'run_number': 1,
-                    'start_time': timezone.now(),
-                    'completion_time': timezone.now(),
-                    # 'points': 0
-                }
-            )
-
-            # If it's not a new drill_result, increment run number and reset points
-            if not created:
-                drill_result.run_number += 1
-                drill_result.completion_time = timezone.now()
-                drill_result.points = 0.0  # Reset points for new attempt
-                drill_result.save(update_fields=['run_number', 'completion_time', '_points_encrypted'])
+            # Get ContentType for QuestionResult creation
+            ct = ContentType.objects.get_for_model(question)
+            
+            # Check if this is the very first question ever answered for this student-drill combination
+            existing_question_results = QuestionResult.objects.filter(
+                drill_result__student=user,
+                drill_result__drill=drill
+            ).exists()
+            
+            if not existing_question_results:
+                # No QuestionResults exist at all - this is definitely a new attempt
+                is_new_attempt = True
             else:
-                drill_result.points = 0.0
-                drill_result.save(update_fields=['_points_encrypted'])
+                # QuestionResults exist - check if this specific question has been answered before
+                existing_question_result = QuestionResult.objects.filter(
+                    drill_result__student=user,
+                    drill_result__drill=drill,
+                    content_type=ct,
+                    object_id=question.id
+                ).exists()
+                
+                if existing_question_result:
+                    # This question has been answered before - this is a retake
+                    # Check if there's already a DrillResult for this retake session
+                    most_recent_drill_result = DrillResult.objects.filter(
+                        student=user,
+                        drill=drill
+                    ).order_by('-start_time').first()
+                    
+                    # Count how many questions have been answered in the most recent DrillResult
+                    questions_in_recent_attempt = QuestionResult.objects.filter(
+                        drill_result=most_recent_drill_result
+                    ).count()
+                    
+                    # If the most recent attempt has fewer questions than total questions, 
+                    # and this question was answered in a previous attempt, this is a retake
+                    from api.models import SmartSelectQuestion, BlankBustersQuestion, SentenceBuilderQuestion, PictureWordQuestion, MemoryGameQuestion
+                    
+                    total_questions = SmartSelectQuestion.objects.filter(drill=drill).count()
+                    total_questions += BlankBustersQuestion.objects.filter(drill=drill).count()
+                    total_questions += SentenceBuilderQuestion.objects.filter(drill=drill).count()
+                    total_questions += PictureWordQuestion.objects.filter(drill=drill).count()
+                    total_questions += MemoryGameQuestion.objects.filter(drill=drill).count()
+                    
+                    if questions_in_recent_attempt < total_questions:
+                        # The most recent attempt is incomplete - continue with it
+                        is_new_attempt = False
+                    else:
+                        # The most recent attempt is complete - start a new one
+                        is_new_attempt = True
+                else:
+                    # This question hasn't been answered before - continue current attempt
+                    is_new_attempt = False
+            
+            if is_new_attempt:
+                # Create a new DrillResult for this attempt
+                # Get the next run number for this student-drill combination
+                last_drill_result = DrillResult.objects.filter(
+                    student=user,
+                    drill=drill
+                ).order_by('-run_number').first()
+                
+                next_run_number = (last_drill_result.run_number + 1) if last_drill_result else 1
+                
+                drill_result = DrillResult.objects.create(
+                    student=user,
+                    drill=drill,
+                    run_number=next_run_number,
+                    start_time=timezone.now(),
+                    completion_time=timezone.now(),
+                    points=0.0
+                )
+                print(f"Created new DrillResult for attempt {next_run_number}")
+            else:
+                # This is a continuation of the current attempt
+                # Find the most recent DrillResult for this student-drill combination
+                drill_result = DrillResult.objects.filter(
+                    student=user,
+                    drill=drill
+                ).order_by('-run_number').first()
+                
+                if not drill_result:
+                    # Fallback: create a new DrillResult if none exists
+                    drill_result = DrillResult.objects.create(
+                        student=user,
+                        drill=drill,
+                        run_number=1,
+                        start_time=timezone.now(),
+                        completion_time=timezone.now(),
+                        points=0.0
+                    )
+                    print(f"Fallback: Created new DrillResult for attempt 1")
+                else:
+                    print(f"Using existing DrillResult for attempt {drill_result.run_number}")
 
             # Determine if the answer is correct
             is_correct = question.check_answer(submitted_answer_data)
@@ -1430,7 +1489,6 @@ class SubmitAnswerView(APIView):
                 print(f"Answer incorrect, awarding 0 points")
 
             # Create or update the QuestionResult for this specific question (generic link)
-            ct = ContentType.objects.get_for_model(question) # Get content type of the concrete question
             print(f"Creating QuestionResult for question ID {question.id}, type {question.type}, content_type {ct}, is_correct {is_correct}, points {points_to_award}")
             question_result, created = QuestionResult.objects.update_or_create(
                 drill_result=drill_result,
@@ -1455,8 +1513,7 @@ class SubmitAnswerView(APIView):
             drill_result.points = total_points_for_run
             drill_result.save(update_fields=['_points_encrypted'])
 
-            # Update user's total points and check for badges
-            user.update_points_and_badges(total_points_for_run)
+            # Note: user.update_points_and_badges() is called automatically in DrillResult.save()
 
             # Get the best score for this drill
             best_score = 0
