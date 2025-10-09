@@ -71,14 +71,17 @@ class User(AbstractUser): # inherit AbstractUser
         return None
 
     def update_points_and_badges(self, points_to_add):
-        """Update user's total points and check for new badges"""
-        # Calculate total points from all drill results
-        total_points = 0
+        """Update user's total points and check for new badges (latest attempt per drill only)"""
+        # Calculate total points from only the latest attempt for each drill
+        from collections import defaultdict
         drill_results = DrillResult.objects.filter(student=self)
+        latest_by_drill = {}
         for result in drill_results:
-            if result.points is not None:
-                total_points += result.points
-        
+            drill_id = result.drill_id
+            if drill_id not in latest_by_drill or result.run_number > latest_by_drill[drill_id].run_number:
+                latest_by_drill[drill_id] = result
+        total_points = sum(r.points or 0 for r in latest_by_drill.values())
+
         # Store previous points for badge comparison
         previous_points = self.total_points
         # Update total points (encrypted)
