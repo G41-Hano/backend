@@ -18,9 +18,9 @@ class Command(BaseCommand):
                 total=Sum('points')
             )['total'] or 0
 
-            # Update student's total_points
+            # Update student's total_points (encrypted property)
             student.total_points = total_points
-            student.save(update_fields=['total_points'])
+            student.save(update_fields=['total_points_encrypted'])
             updated_count += 1
 
             self.stdout.write(

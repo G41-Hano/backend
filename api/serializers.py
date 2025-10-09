@@ -101,11 +101,11 @@ class UserSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
     role_input = serializers.ChoiceField(choices=Role.ROLE_CHOICES, write_only=True, required=True)
     badges = BadgeSerializer(many=True, read_only=True)
-    total_points = serializers.IntegerField(read_only=True)
+    total_points_encrypted = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar", "badges", "total_points"]
+        fields = ["id", "username", "password", "first_name", "last_name", "email", "role", "role_input", "first_name_encrypted", "last_name_encrypted", "avatar", "badges", "total_points_encrypted"]
         extra_kwargs = {"password": {"write_only": True},
                     "first_name_encrypted": {"read_only": True},
                     "last_name_encrypted": {"read_only": True},

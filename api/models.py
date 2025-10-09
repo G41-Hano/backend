@@ -32,7 +32,8 @@ class User(AbstractUser): # inherit AbstractUser
     last_name_encrypted = models.BinaryField(null=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     badges = models.ManyToManyField(Badge, related_name='users', blank=True)
-    total_points = models.IntegerField(default=0)  # Track total points across all drills
+    total_points_encrypted = models.BinaryField(null=True, blank=True)
+
 
     def save(self, *args, **kwargs):
         # encrypt first and last name before saving
@@ -41,11 +42,23 @@ class User(AbstractUser): # inherit AbstractUser
               self.first_name_encrypted = encrypt(self.first_name)
           if (self.last_name):
               self.last_name_encrypted = encrypt(self.last_name)
+          if not self.total_points_encrypted:
+              self.total_points_encrypted = encrypt(str(0))
         
         self.first_name = "***"
         self.last_name = "***"
         
         super().save(*args, **kwargs)
+
+    @property
+    def total_points(self):
+        if self.total_points_encrypted:
+            return int(decrypt(self.total_points_encrypted))
+        return 0
+
+    @total_points.setter
+    def total_points(self, value):
+        self.total_points_encrypted = encrypt(str(int(value)))
 
     def get_decrypted_first_name(self):
         if self.first_name_encrypted:
@@ -68,10 +81,9 @@ class User(AbstractUser): # inherit AbstractUser
         
         # Store previous points for badge comparison
         previous_points = self.total_points
-        
-        # Update total points
+        # Update total points (encrypted)
         self.total_points = total_points
-        self.save(update_fields=['total_points'])
+        self.save(update_fields=['total_points_encrypted'])
 
         # Get all badges that could be earned
         new_badges = set()
