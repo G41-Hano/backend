@@ -32,7 +32,8 @@ class User(AbstractUser): # inherit AbstractUser
     last_name_encrypted = models.BinaryField(null=True)
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
     badges = models.ManyToManyField(Badge, related_name='users', blank=True)
-    total_points = models.IntegerField(default=0)  # Track total points across all drills
+    total_points_encrypted = models.BinaryField(null=True, blank=True)
+
 
     def save(self, *args, **kwargs):
         # encrypt first and last name before saving
@@ -41,11 +42,23 @@ class User(AbstractUser): # inherit AbstractUser
               self.first_name_encrypted = encrypt(self.first_name)
           if (self.last_name):
               self.last_name_encrypted = encrypt(self.last_name)
+          if not self.total_points_encrypted:
+              self.total_points_encrypted = encrypt(str(0))
         
         self.first_name = "***"
         self.last_name = "***"
         
         super().save(*args, **kwargs)
+
+    @property
+    def total_points(self):
+        if self.total_points_encrypted:
+            return int(decrypt(self.total_points_encrypted))
+        return 0
+
+    @total_points.setter
+    def total_points(self, value):
+        self.total_points_encrypted = encrypt(str(int(value)))
 
     def get_decrypted_first_name(self):
         if self.first_name_encrypted:
@@ -58,20 +71,22 @@ class User(AbstractUser): # inherit AbstractUser
         return None
 
     def update_points_and_badges(self, points_to_add):
-        """Update user's total points and check for new badges"""
-        # Calculate total points from all drill results
-        total_points = 0
+        """Update user's total points and check for new badges (latest attempt per drill only)"""
+        # Calculate total points from only the latest attempt for each drill
+        from collections import defaultdict
         drill_results = DrillResult.objects.filter(student=self)
+        latest_by_drill = {}
         for result in drill_results:
-            if result.points is not None:
-                total_points += result.points
-        
+            drill_id = result.drill_id
+            if drill_id not in latest_by_drill or result.run_number > latest_by_drill[drill_id].run_number:
+                latest_by_drill[drill_id] = result
+        total_points = sum(r.points or 0 for r in latest_by_drill.values())
+
         # Store previous points for badge comparison
         previous_points = self.total_points
-        
-        # Update total points
+        # Update total points (encrypted)
         self.total_points = total_points
-        self.save(update_fields=['total_points'])
+        self.save(update_fields=['total_points_encrypted'])
 
         # Get all badges that could be earned
         new_badges = set()
