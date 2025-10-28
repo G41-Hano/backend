@@ -4,6 +4,9 @@ from rest_framework import status
 from ..services import openrouter_service
 from ..serializers import PromptSerializer
 
+from google import genai
+from google.genai import types
+
 # payload format for:
 # 
 # Generate Definitions:
@@ -64,4 +67,133 @@ class GenAICheckLimitView(APIView):
       )
 
 
+DEFINITION_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "is_valid": {
+            "type": "boolean",
+            "description": "True if the word is a real dictionary word."
+        },
+        "definitions": {
+            "type": "array",
+            "description": "A list of 3 distinct 3rd-grade definitions, or an empty array if not valid.",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    # Ensure all fields are required to prevent null values
+    "required": ["is_valid", "definitions"],
+    # Explicitly state the order
+    "propertyOrdering": ["is_valid", "definitions"]
+}
 
+def generate_gemini_response(serializer, type):
+  """
+  Helper function to initialize Gemini AI.
+  Will check if it is a generic AI prompt or for generating definitions.
+  """
+  # 1. Get data from serializer request
+  prompt = serializer.validated_data.get('prompt')
+  system_message = serializer.validated_data.get('system_message')
+  if type == "DEFINITION":
+    system_message = (
+      "Respond STRICTLY according to the provided JSON schema."
+      "Do not include any other text, markdown formatting, or explanation." 
+      f"{system_message or ''}"
+    )
+  temperature = serializer.validated_data.get('temperature')
+  max_tokens = serializer.validated_data.get('max_tokens')
+
+  try:
+    # 2. Initialize the Gemini Client
+    client = genai.Client()
+
+    # 3. Configure the Generation
+    if type == "DEFINITION":
+      config = types.GenerateContentConfig(
+        system_instruction=system_message,
+        temperature=temperature,
+        max_output_tokens=1024,
+        response_mime_type="application/json",
+        response_schema=DEFINITION_OUTPUT_SCHEMA,
+      )
+    elif type == "GENERIC":
+      config = types.GenerateContentConfig(
+        system_instruction=system_message,
+        temperature=temperature,
+        max_output_tokens=1024,
+      )
+    
+    # 4. Call the Gemini API
+    response = client.models.generate_content(
+      model="gemini-2.5-flash",
+      contents=prompt,
+      config=config
+    )
+
+    token_data = {
+      "prompt_tokens": response.usage_metadata.prompt_token_count,
+      "output_tokens": response.usage_metadata.candidates_token_count, 
+      "total_tokens": response.usage_metadata.total_token_count
+    }
+
+    # 5. Determine the content to return based on the type
+    if type == "DEFINITION":
+      # Returns a Python dict/object (the structured JSON)
+      response_data = response.parsed
+    else: # type == "GENERIC"
+      # Returns a string (the plain text)
+      response_data = response.text
+
+    # Handle cases where the model might be blocked or return no content
+    if response_data is None:
+      return Response(
+        {"error": "Please try to generate again.", "tokens": token_data},
+        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+      )
+
+    return Response(
+        {"response": response_data, "tokens": token_data},
+        status=status.HTTP_200_OK
+    )
+
+  except Exception as e:
+    # Handle API-specific or network errors
+    return Response(
+      {"error": f"Gemini API Error: {e}"},
+      status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+
+class GeminiAIGenericView(APIView):
+  """
+  use Gemini AI to make generic prompts.
+  """
+  def post(self, request):
+    # Get validated data from the request
+    serializer = PromptSerializer(data=request.data)
+    if serializer.is_valid():
+      return generate_gemini_response(serializer, "GENERIC")
+
+    # Return validation errors if serializer is not valid
+    return Response(
+      serializer.errors,
+      status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+class GeminiAIDefinitionView(APIView):
+  """
+  use Gemini AI to make 3 definitions out of a word.
+  """
+  def post(self, request):
+    # Get validated data from the request
+    serializer = PromptSerializer(data=request.data)
+    if serializer.is_valid():
+      return generate_gemini_response(serializer, "DEFINITION")
+
+    # Return validation errors if serializer is not valid
+    return Response(
+      serializer.errors,
+      status=status.HTTP_400_BAD_REQUEST
+    )
