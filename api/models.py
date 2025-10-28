@@ -69,6 +69,11 @@ class User(AbstractUser): # inherit AbstractUser
         if self.last_name_encrypted:
             return decrypt(self.last_name_encrypted)
         return None
+    
+    def get_decrypted_total_points(self):
+        if self.total_points_encrypted:
+            return int(decrypt(self.total_points_encrypted))
+        return 0
 
     def update_points_and_badges(self, points_to_add):
         """Update user's total points and check for new badges (latest attempt per drill only)"""

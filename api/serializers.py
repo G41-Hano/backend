@@ -101,7 +101,7 @@ class UserSerializer(serializers.ModelSerializer):
     role = serializers.CharField(source="role.name", read_only=True)  # Include role in response
     role_input = serializers.ChoiceField(choices=Role.ROLE_CHOICES, write_only=True, required=True)
     badges = BadgeSerializer(many=True, read_only=True)
-    total_points_encrypted = serializers.IntegerField(read_only=True)
+    # total_points_encrypted = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = User
@@ -132,6 +132,13 @@ class UserSerializer(serializers.ModelSerializer):
             ret['last_name'] = instance.get_decrypted_last_name()
         except Exception as e:
             ret['last_name'] = "ERROR NAME"
+
+        # Decrypt total points and add it to the output as 'total_points'
+        try:
+            # We use 'total_points' for the output key for a cleaner API
+            ret['total_points'] = instance.get_decrypted_total_points()
+        except Exception as e:
+            ret['total_points'] = 0
 
         return ret
 
