@@ -352,13 +352,24 @@ class Drill(models.Model):
                     # Handle optional media from request.FILES (key in 'media')
                     image = None
                     video = None
+                    image_url = None
+                    video_url = None
+                    
                     media_key = choice.pop('media', None)
                     if request and media_key and isinstance(media_key, str) and hasattr(request, 'FILES') and media_key in request.FILES:
+                        # Handle uploaded file
                         f = request.FILES[media_key]
                         if f.content_type.startswith('image/'):
                             image = f
                         elif f.content_type.startswith('video/'):
                             video = f
+                    elif media_key and isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                        # Handle URL from wordlist - determine if it's image or video based on extension or path
+                        lower_media = media_key.lower()
+                        if any(ext in lower_media for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '/images/']):
+                            image_url = media_key
+                        elif any(ext in lower_media for ext in ['.mp4', '.webm', '.mov', '.avi', '/videos/']):
+                            video_url = media_key
 
                     is_correct = False
                     if hasattr(question, 'answer') and question.answer is not None:
@@ -367,7 +378,8 @@ class Drill(models.Model):
                         except (ValueError, TypeError):
                             is_correct = False
 
-                    DrillChoice.objects.create(
+                    # Create choice with file or URL
+                    drill_choice = DrillChoice.objects.create(
                         content_type=ct,
                         object_id=question.id,
                         text=choice.get('text', ''),
@@ -375,6 +387,42 @@ class Drill(models.Model):
                         video=video,
                         is_correct=is_correct,
                     )
+                    
+                    # If we have URLs, save them to the file fields
+                    if image_url:
+                        from django.core.files.base import ContentFile
+                        import requests
+                        try:
+                            # For local URLs, just store the path
+                            if image_url.startswith('/'):
+                                drill_choice.image.name = image_url.lstrip('/')
+                            else:
+                                # For external URLs, download and save
+                                response = requests.get(image_url, timeout=10)
+                                if response.status_code == 200:
+                                    filename = os.path.basename(image_url.split('?')[0])
+                                    drill_choice.image.save(filename, ContentFile(response.content), save=False)
+                        except Exception as e:
+                            print(f"Error saving image URL: {e}")
+                    
+                    if video_url:
+                        from django.core.files.base import ContentFile
+                        import requests
+                        try:
+                            # For local URLs, just store the path
+                            if video_url.startswith('/'):
+                                drill_choice.video.name = video_url.lstrip('/')
+                            else:
+                                # For external URLs, download and save
+                                response = requests.get(video_url, timeout=10)
+                                if response.status_code == 200:
+                                    filename = os.path.basename(video_url.split('?')[0])
+                                    drill_choice.video.save(filename, ContentFile(response.content), save=False)
+                        except Exception as e:
+                            print(f"Error saving video URL: {e}")
+                    
+                    if image_url or video_url:
+                        drill_choice.save()
         
         return self
         
@@ -492,13 +540,24 @@ class Drill(models.Model):
                 for c_idx, choice in enumerate(choices_data or []):
                     image = None
                     video = None
+                    image_url = None
+                    video_url = None
+                    
                     media_key = choice.pop('media', None)
                     if request and media_key and isinstance(media_key, str) and hasattr(request, 'FILES') and media_key in request.FILES:
+                        # Handle uploaded file
                         f = request.FILES[media_key]
                         if f.content_type.startswith('image/'):
                             image = f
                         elif f.content_type.startswith('video/'):
                             video = f
+                    elif media_key and isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                        # Handle URL from wordlist
+                        lower_media = media_key.lower()
+                        if any(ext in lower_media for ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '/images/']):
+                            image_url = media_key
+                        elif any(ext in lower_media for ext in ['.mp4', '.webm', '.mov', '.avi', '/videos/']):
+                            video_url = media_key
 
                     is_correct = False
                     if hasattr(question, 'answer') and question.answer is not None:
@@ -507,7 +566,7 @@ class Drill(models.Model):
                         except (ValueError, TypeError):
                             is_correct = False
 
-                    DrillChoice.objects.create(
+                    drill_choice = DrillChoice.objects.create(
                         content_type=ct,
                         object_id=question.id,
                         text=choice.get('text', ''),
@@ -515,6 +574,38 @@ class Drill(models.Model):
                         video=video,
                         is_correct=is_correct,
                     )
+                    
+                    # If we have URLs, save them to the file fields
+                    if image_url:
+                        from django.core.files.base import ContentFile
+                        import requests
+                        try:
+                            if image_url.startswith('/'):
+                                drill_choice.image.name = image_url.lstrip('/')
+                            else:
+                                response = requests.get(image_url, timeout=10)
+                                if response.status_code == 200:
+                                    filename = os.path.basename(image_url.split('?')[0])
+                                    drill_choice.image.save(filename, ContentFile(response.content), save=False)
+                        except Exception as e:
+                            print(f"Error saving image URL: {e}")
+                    
+                    if video_url:
+                        from django.core.files.base import ContentFile
+                        import requests
+                        try:
+                            if video_url.startswith('/'):
+                                drill_choice.video.name = video_url.lstrip('/')
+                            else:
+                                response = requests.get(video_url, timeout=10)
+                                if response.status_code == 200:
+                                    filename = os.path.basename(video_url.split('?')[0])
+                                    drill_choice.video.save(filename, ContentFile(response.content), save=False)
+                        except Exception as e:
+                            print(f"Error saving video URL: {e}")
+                    
+                    if image_url or video_url:
+                        drill_choice.save()
 
         # Delete questions that were removed in payload
         for t, model_cls in type_to_model.items():
