@@ -79,7 +79,6 @@ class CheckEmailView(APIView):
             'message': 'This email address is already taken' if exists else 'This email address is available'
         })
 
-
 class RequestPasswordReset(generics.GenericAPIView):
     permission_classes = [AllowAny]
     serializer_class = ResetPasswordRequestSerializer
@@ -756,7 +755,6 @@ class DrillRetrieveUpdateDestroyView(generics.RetrieveUpdateDestroyAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-# Profile View
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
     
@@ -1273,7 +1271,7 @@ class ClassroomPointsView(generics.RetrieveAPIView):
             raise NotFound("Classroom not found.")
 
         # Only allow teachers of this classroom or enrolled students to view leaderboard
-        if user.role.name == 'teacher' and classroom.created_by == user:
+        if user.role.name == 'teacher' and classroom.teacher == user:
             pass  # allowed
         elif user.role.name == 'student':
             if not classroom.students.filter(id=user.id).exists():
@@ -1286,17 +1284,28 @@ class ClassroomPointsView(generics.RetrieveAPIView):
         leaderboard = []
         for student in students:
             # Get latest attempt points for each drill in this classroom
-            drill_results = DrillResult.objects.filter(student=student, drill__classroom=classroom)
+            drill_results = DrillResult.objects.filter(
+                student=student, 
+                drill__classroom=classroom
+            ).select_related('drill') 
             
             # Group by drill and get the latest attempt (highest run_number) for each drill
             drill_latest_scores = {}
+
+            # Set to track unique drills attempted by this student in this classroom
+            completed_drill_ids = set()
+
             for result in drill_results:
                 drill_id = result.drill.id
+
                 if drill_id not in drill_latest_scores or result.run_number > drill_latest_scores[drill_id]['run_number']:
                     drill_latest_scores[drill_id] = {
                         'points': result.points,
                         'run_number': result.run_number
                     }
+                
+                # Add the drill ID to the set to count it as completed
+                completed_drill_ids.add(drill_id)
             
             # Sum up the latest attempt scores
             total_points = sum(score['points'] or 0 for score in drill_latest_scores.values())
@@ -1304,7 +1313,8 @@ class ClassroomPointsView(generics.RetrieveAPIView):
             leaderboard.append({
                 'student_id': student.id,
                 'student_name': f"{student.get_decrypted_first_name()} {student.get_decrypted_last_name()}",
-                'total_points': total_points
+                'total_points': total_points,
+                'completed_drills': len(completed_drill_ids)
             })
 
         # Sort leaderboard by total_points descending
@@ -1315,7 +1325,6 @@ class ClassroomPointsView(generics.RetrieveAPIView):
             "leaderboard": leaderboard
         }
 
-# Add a view to submit answers for a single question
 class SubmitAnswerView(APIView):
     permission_classes = [IsAuthenticated]
 
