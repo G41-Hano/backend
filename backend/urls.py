@@ -3,7 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from api.views import (
-    CreateUserView, UserListView, CheckUsernameView, CheckEmailView, CustomTokenView,
+    CreateUserView, UserListView, CheckUsernameView, CheckEmailView, CustomTokenView, PingView,
     RequestPasswordReset, ResetPassword, ClassroomListView, ClassroomDetailView,
     ClassroomStudentsView, JoinClassroomView, DrillListCreateView, DrillRetrieveUpdateDestroyView,
     ProfileView, import_students_from_csv,
@@ -17,6 +17,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 # API endpoints
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path("api/ping/", PingView.as_view(), name="ping"),
     path("api/userlist/", UserListView.as_view(), name="users"),
     path("api/user/register/", CreateUserView.as_view(), name="register"),
     path("api/user/check-username/", CheckUsernameView.as_view(), name="check_username"),

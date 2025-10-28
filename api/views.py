@@ -22,8 +22,9 @@ from rest_framework.decorators import api_view, permission_classes, action
 from api.utils.encryption import encrypt, decrypt  # Import the decrypt function
 from cryptography.fernet import InvalidToken  # Import the InvalidToken exception
 from django.utils import timezone
-from django.db import models
+from django.db import models, connection
 from django.db.models import Sum, Avg, Max
+from django.db.utils import OperationalError
 import os
 import math
 import logging
@@ -1822,46 +1823,51 @@ class BadgeViewSet(viewsets.ReadOnlyModelViewSet):
         if user.role.name == 'teacher':
             # Get all badges with earning statistics
             badges = Badge.objects.all()
-            """
-            Get points for students:
-            - Teachers can see all students' points
-            - Students can only see their own points
-            """
-            # First check if user is authenticated
-            if not request.user.is_authenticated:
-                return Response(
-                    {'error': 'Authentication required'}, 
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
+            badge_data = []
 
-            # Then check if user has a role
-            if not hasattr(request.user, 'role'):
-                return Response(
-                    {'error': 'User has no role assigned'}, 
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            try:
-                if request.user.role.name == 'teacher':
-                    students = User.objects.filter(role__name='student')
-                    student_points_data = []
-                    for user in students:
-                        student_points_data.append({
-                            'student_id': user.id,
-                            'student_name': f"{user.get_decrypted_first_name()} {user.get_decrypted_last_name()}",
-                            'total_points': user.total_points,
-                        })
-                    # Sort by total_points descending
-                    student_points_data.sort(key=lambda x: x['total_points'], reverse=True)
-                    return Response(student_points_data)
-                else:
-                    # Students can only see their own points
-                    return Response({
-                        'student_id': request.user.id,
-                        'student_name': f"{request.user.get_decrypted_first_name()} {request.user.get_decrypted_last_name()}",
-                        'total_points': request.user.total_points,
-                    })
-            except Exception as e:
+            for badge in badges:
+                # Count how many students have earned this badge
+                earned_count = User.objects.filter(badges=badge).count()
+                total_students = User.objects.filter(role__name='student').count()
+                
+                badge_data.append({
+                    'id': badge.id,
+                    'name': badge.name,
+                    'description': badge.description,
+                    'image': request.build_absolute_uri(badge.image.url) if badge.image else None,
+                    'points_required': badge.points_required,
+                    # 'is_first_drill' removed
+                    'drills_completed_required': badge.drills_completed_required,
+                    'correct_answers_required': badge.correct_answers_required,
+                    'earned_count': earned_count,
+                    'total_students': total_students,
+                    'completion_rate': (earned_count / total_students * 100) if total_students > 0 else 0
+                })
+            
+            return Response(badge_data)
+        else:
+            # For students, show their earned badges with progress
+            earned_badges = user.badges.all()
+            all_badges = Badge.objects.all()
+            
+            # Create a set of earned badge IDs for quick lookup
+            earned_badge_ids = set(earned_badges.values_list('id', flat=True))
+            
+            badge_data = []
+            for badge in all_badges:
+                # Calculate progress for each badge
+                progress = None
+                if badge.points_required:
+                    progress = min(100, (user.total_points / badge.points_required * 100))
+                elif badge.drills_completed_required:
+                    completed_drills = DrillResult.objects.filter(student=user).count()
+                    progress = min(100, (completed_drills / badge.drills_completed_required * 100))
+                elif badge.correct_answers_required:
+                    correct_answers = QuestionResult.objects.filter(
+                        drill_result__student=user,
+                        is_correct=True
+                    ).count()
+                    progress = min(100, (correct_answers / badge.correct_answers_required * 100))
                 
                 badge_data.append({
                     'id': badge.id,
@@ -2004,3 +2010,40 @@ def unread_badge_notifications(request):
     # Sort by badge id ascending (if badge exists)
     badge_notifications.sort(key=lambda n: n['badge']['id'] if n['badge'] and n['badge'].get('id') is not None else float('inf'))
     return Response(badge_notifications)
+
+class PingView(APIView):
+    """
+    A simple view to check if the server is alive.
+    It's unauthenticated and performs no actions.
+    """
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        db_connected = False
+        db_error = None
+
+        try:
+            # 1. Get a database connection
+            with connection.cursor() as cursor:
+                # 2. Execute a simple, fast, read-only query.
+                # 'SELECT 1' is standard for this.
+                cursor.execute("SELECT 1")
+            
+            # 3. If we get here, the query was successful
+            db_connected = True 
+        except OperationalError as e:
+            # This is the most common exception Django raises if it can't connect to the database.
+            db_error = str(e)
+
+        if db_connected:
+            # Everything is OK
+            return Response(
+                {"status": "ok", "database": "connected"},
+                status=status.HTTP_200_OK
+            )
+        else:
+            # Database check failed, report a service error
+            return Response(
+                {"status": "error", "database": "disconnected", "error_message": db_error},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE  # 503 Service Unavailable
+            )
