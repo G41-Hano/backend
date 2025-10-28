@@ -51,6 +51,8 @@ ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY").encode()
 
 # KEY for using Gen. AI (through OpenRouter)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+# KEY for using Gen. AI (through Gemini AI)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
