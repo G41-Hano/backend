@@ -340,6 +340,27 @@ class Drill(models.Model):
                 except Exception:
                     pass
 
+            # Handle question_media for Smart Select questions (M)
+            if q_type == 'M' and isinstance(q_data, dict):
+                media_key = q_data.get('question_media')
+                if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                    # Handle uploaded file
+                    f = request.FILES[media_key]
+                    saved_url = None
+                    if f.content_type.startswith('image/'):
+                        filename = f"questions/images/{os.path.basename(f.name)}"
+                        saved_path = default_storage.save(filename, f)
+                        saved_url = default_storage.url(saved_path)
+                    elif f.content_type.startswith('video/'):
+                        filename = f"questions/videos/{os.path.basename(f.name)}"
+                        saved_path = default_storage.save(filename, f)
+                        saved_url = default_storage.url(saved_path)
+                    if saved_url:
+                        q_data['question_media'] = saved_url
+                elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                    # Already a URL, keep it
+                    q_data['question_media'] = media_key
+
             # Create question
             question_fields = {k: v for k, v in q_data.items() if k not in ['id', 'choices']}
             question = model_cls.objects.create(drill=self, **question_fields)
@@ -513,6 +534,27 @@ class Drill(models.Model):
             except Exception:
                 pass
 
+            # Handle question_media for Smart Select questions (M)
+            if q_type == 'M':
+                media_key = q_data.get('question_media')
+                if request and hasattr(request, 'FILES') and isinstance(media_key, str) and media_key in request.FILES:
+                    # Handle uploaded file
+                    f = request.FILES[media_key]
+                    saved_url = None
+                    if f.content_type.startswith('image/'):
+                        filename = f"questions/images/{os.path.basename(f.name)}"
+                        saved_path = default_storage.save(filename, f)
+                        saved_url = default_storage.url(saved_path)
+                    elif f.content_type.startswith('video/'):
+                        filename = f"questions/videos/{os.path.basename(f.name)}"
+                        saved_path = default_storage.save(filename, f)
+                        saved_url = default_storage.url(saved_path)
+                    if saved_url:
+                        q_data['question_media'] = saved_url
+                elif isinstance(media_key, str) and (media_key.startswith('http') or media_key.startswith('/')):
+                    # Already a URL, keep it
+                    q_data['question_media'] = media_key
+
             # Upsert question
             question_id = q_data.get('id')
             question_fields = {k: v for k, v in q_data.items() if k not in ['id', 'choices']}
@@ -648,6 +690,7 @@ class SmartSelectQuestion(DrillQuestionBase):
     drill_type = "M"
     answer = models.CharField(max_length=200, blank=True, null=True)  
     choices_generic = GenericRelation('DrillChoice', related_query_name='smartselect_question')
+    question_media = models.URLField(max_length=500, blank=True, null=True) 
 
     def check_answer(self, submitted_answer):
         try:

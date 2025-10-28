@@ -334,6 +334,7 @@ class DrillSerializer(serializers.ModelSerializer):
             payload = self._base_payload(question, 'M', drill_obj)
             payload['answer'] = question.answer
             payload['choices'] = self._serialize_choices(question)
+            payload['question_media'] = question.question_media if question.question_media else None
             questions.append(payload)
         
         return questions
