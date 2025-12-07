@@ -1517,10 +1517,11 @@ class SubmitAnswerView(APIView):
             print(f"QuestionResult {'created' if created else 'updated'} with ID {question_result.id}")
 
             # Update overall points on DrillResult
-            #drill_result.points += points_to_award
+            # Recalculate total points from all question_results
             total_points_for_run = drill_result.question_results.aggregate(total=models.Sum('points_awarded'))['total'] or 0
             drill_result.points = total_points_for_run
-            drill_result.save(update_fields=['_points_encrypted'])
+            # Call full save() to trigger update_points_and_badges() and proper encryption
+            drill_result.save()
 
             # Note: user.update_points_and_badges() is called automatically in DrillResult.save()
 
